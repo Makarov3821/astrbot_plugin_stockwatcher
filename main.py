@@ -1,4 +1,4 @@
-"""AstrBot entry point. No autonomous polling or AI calls in steps 01-03."""
+"""AstrBot entry point through step 07; no autonomous polling or order execution."""
 
 from __future__ import annotations
 
@@ -10,12 +10,18 @@ from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.star import Context, Star, StarTools
 
+from .stockwatcher.analysis import AnalysisService
 from .stockwatcher.commands import Commands
 from .stockwatcher.config import Settings
 from .stockwatcher.domain import ValidationError
+from .stockwatcher.evidence import EvidenceStore
 from .stockwatcher.ledger import Ledger
 from .stockwatcher.market import MarketService
+from .stockwatcher.model import AstrBotModel
+from .stockwatcher.profiles import Profiles
 from .stockwatcher.provider import AlpacaProvider, MarketError
+from .stockwatcher.research_commands import ResearchCommands
+from .stockwatcher.sources import PublicSources, SourceService
 from .stockwatcher.storage import Store
 
 
@@ -29,6 +35,8 @@ class StockWatcherPlugin(Star):
         self.store: Store | None = None
         self.provider: AlpacaProvider | None = None
         self.commands: Commands | None = None
+        self.public_sources: PublicSources | None = None
+        self.research: ResearchCommands | None = None
 
     async def initialize(self) -> None:
         async with self._init_lock:
@@ -47,16 +55,42 @@ class StockWatcherPlugin(Star):
                 raise
             try:
                 self.provider = AlpacaProvider(self.settings)
+                ledger = Ledger(self.store)
+                market = MarketService(self.provider, self.store)
+                profiles = Profiles(self.store, self.settings.investment_defaults)
+                evidence = EvidenceStore(self.store)
+                self.public_sources = PublicSources(
+                    self.store,
+                    evidence,
+                    user_agent=self.settings.sec_user_agent,
+                    ir_hosts=self.settings.ir_allowed_hosts,
+                )
+                sources = SourceService(self.store, evidence, self.public_sources, self.provider)
+                model = AstrBotModel(
+                    self.context,
+                    provider_id=self.settings.model_provider_id,
+                    timeout_seconds=self.settings.model_timeout_seconds,
+                )
+                analysis = AnalysisService(
+                    self.store, profiles, ledger, market, evidence, sources, model
+                )
+                self.research = ResearchCommands(self.store, profiles, evidence, sources, analysis)
+                self.commands = Commands(self.store, ledger, market, self.settings, self.research)
             except BaseException:
+                if self.public_sources is not None:
+                    await self.public_sources.close()
+                if self.provider is not None:
+                    await self.provider.close()
                 await asyncio.to_thread(self.store.close)
                 self.store = None
                 raise
-            self.commands = Commands(
-                self.store,
-                Ledger(self.store),
-                MarketService(self.provider, self.store),
-                self.settings,
-            )
+
+    async def _dispatch(self, text: str, origin: str, request_key: str | None) -> str:
+        assert self.commands is not None and self.research is not None
+        result = await self.commands.handle(text, origin=origin, request_key=request_key)
+        if not any(word in text.split() for word in ("开始", "回答", "引导")):
+            result += await self.research.nudge()
+        return result
 
     async def _push_test(self, current_origin: str) -> str:
         assert self.store is not None
@@ -100,7 +134,7 @@ class StockWatcherPlugin(Star):
             if len(words) == 2 and words[-1] == "推送测试":
                 coroutine = self._push_test(origin)
             else:
-                coroutine = self.commands.handle(text, origin=origin, request_key=request_key)
+                coroutine = self._dispatch(text, origin, request_key)
             task = asyncio.create_task(coroutine)
             self._tasks.add(task)
             try:
@@ -126,6 +160,8 @@ class StockWatcherPlugin(Star):
             self._tasks.clear()
             if self.provider is not None:
                 await self.provider.close()
+            if self.public_sources is not None:
+                await self.public_sources.close()
             if self.store is not None:
                 await asyncio.to_thread(self.store.close)
             self.commands = None

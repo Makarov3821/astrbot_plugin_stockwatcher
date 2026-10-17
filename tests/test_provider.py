@@ -292,6 +292,26 @@ def test_secret_repr_and_config_validation():
     assert parse_time("2026-01-05T05:00:00Z").tzinfo == UTC
 
 
+def test_installation_schema_defaults_are_accepted_by_profile(store):
+    import json
+    from pathlib import Path
+
+    from stockwatcher.profiles import Profiles
+
+    schema = json.loads((Path(__file__).resolve().parents[1] / "_conf_schema.json").read_text())
+    config = {
+        key: value.get("default") for key, value in schema.items() if key != "investment_defaults"
+    }
+    config["investment_defaults"] = {
+        key: value["default"] for key, value in schema["investment_defaults"]["items"].items()
+    }
+    settings = Settings.from_mapping(config)
+    profile = Profiles(store, settings.investment_defaults).resolved("MU")
+    assert profile["values"]["allow_add"] is None
+    assert profile["values"]["drawdown_basis"] is None
+    assert profile["values"]["max_stock_pct"] is None
+
+
 def test_asset_metadata_and_read_only_endpoints():
     seen = []
 

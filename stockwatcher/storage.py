@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .domain import MarketBatch, ValidationError
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 SCHEMA = (
     "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
     """CREATE TABLE ledger_events (
@@ -30,6 +30,26 @@ SCHEMA = (
         fetched_at TEXT NOT NULL, payload TEXT NOT NULL
     )""",
     "CREATE INDEX market_lookup ON market_snapshots(instrument, timeframe, adjustment, id)",
+)
+
+RESEARCH_SCHEMA = (
+    "CREATE TABLE profile_versions (revision INTEGER PRIMARY KEY, created_at TEXT NOT NULL, reason TEXT NOT NULL, payload TEXT NOT NULL)",
+    """CREATE TABLE evidence_versions (
+        evidence_id TEXT NOT NULL, version INTEGER NOT NULL, instrument TEXT NOT NULL,
+        canonical_url TEXT NOT NULL, published_at TEXT, observed_at TEXT NOT NULL,
+        content_hash TEXT NOT NULL, payload TEXT NOT NULL,
+        PRIMARY KEY(evidence_id,version))""",
+    "CREATE INDEX evidence_lookup ON evidence_versions(instrument,observed_at)",
+    """CREATE TABLE analysis_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, instrument TEXT NOT NULL,
+        created_at TEXT NOT NULL, profile_revision INTEGER NOT NULL,
+        status TEXT NOT NULL, input_json TEXT NOT NULL, result_json TEXT NOT NULL,
+        model_json TEXT NOT NULL, raw_response TEXT NOT NULL, request_key TEXT UNIQUE)""",
+    """CREATE TABLE target_proposals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, analysis_id INTEGER NOT NULL UNIQUE,
+        instrument TEXT NOT NULL, profile_revision INTEGER NOT NULL,
+        price TEXT NOT NULL, target_deadline TEXT NOT NULL, adopt_before TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending', decided_at TEXT)""",
 )
 
 
@@ -51,7 +71,11 @@ class Store:
                 if version == 0:
                     for statement in SCHEMA:
                         db.execute(statement)
-                    db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+                    version = 1
+                if version == 1:
+                    for statement in RESEARCH_SCHEMA:
+                        db.execute(statement)
+                db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         except BaseException:
             self._db.close()
             raise

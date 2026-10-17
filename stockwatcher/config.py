@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -17,6 +18,11 @@ class Settings:
     timeout_seconds: int = 15
     delay_minutes: int = 16
     display_timezone: str = "Asia/Shanghai"
+    sec_user_agent: str = field(default="", repr=False)
+    ir_allowed_hosts: tuple[str, ...] = ("investors.micron.com",)
+    model_provider_id: str = ""
+    model_timeout_seconds: int = 90
+    investment_defaults: dict = field(default_factory=dict)
 
     def __post_init__(self):
         if self.account_mode not in {"paper", "live"}:
@@ -25,6 +31,15 @@ class Settings:
             raise ValidationError("请求超时应为 1～60 秒。")
         if not 16 <= self.delay_minutes <= 1440:
             raise ValidationError("免费 SIP 查询至少预留 16 分钟延迟缓冲。")
+        if not 5 <= self.model_timeout_seconds <= 300:
+            raise ValidationError("模型超时应为 5～300 秒。")
+        if not isinstance(self.investment_defaults, dict):
+            raise ValidationError("个人默认配置应为一个对象。")
+        if not isinstance(self.ir_allowed_hosts, (tuple, list)) or any(
+            not isinstance(host, str) or not re.fullmatch(r"[A-Za-z0-9.-]+\.[A-Za-z]{2,}", host)
+            for host in self.ir_allowed_hosts
+        ):
+            raise ValidationError("IR 允许列表只填写域名，不填写 URL、IP 或本地地址。")
         try:
             ZoneInfo(self.display_timezone)
         except (ZoneInfoNotFoundError, ValueError) as exc:
@@ -37,6 +52,8 @@ class Settings:
     @classmethod
     def from_mapping(cls, config: dict | None = None) -> Settings:
         config = config or {}
+        if not isinstance(config.get("investment_defaults", {}), dict):
+            raise ValidationError("个人默认配置应为一个对象。")
         try:
             return cls(
                 key_id=str(
@@ -52,6 +69,18 @@ class Settings:
                 timeout_seconds=int(config.get("request_timeout_seconds", 15)),
                 delay_minutes=int(config.get("delay_minutes", 16)),
                 display_timezone=str(config.get("display_timezone", "Asia/Shanghai")),
+                sec_user_agent=str(
+                    config.get("sec_user_agent")
+                    or os.environ.get("STOCKWATCHER_SEC_USER_AGENT", "")
+                ).strip(),
+                ir_allowed_hosts=tuple(config.get("ir_allowed_hosts", ["investors.micron.com"])),
+                model_provider_id=str(config.get("model_provider_id", "")),
+                model_timeout_seconds=int(config.get("model_timeout_seconds", 90)),
+                investment_defaults={
+                    key: value
+                    for key, value in config.get("investment_defaults", {}).items()
+                    if value != ""
+                },
             )
         except (ValueError, TypeError) as exc:
             if isinstance(exc, ValidationError):

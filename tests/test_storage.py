@@ -41,3 +41,33 @@ def test_two_connections_cannot_both_spend_same_cash(tmp_path):
     finally:
         first.close()
         second.close()
+
+
+def test_v1_migration_preserves_ledger_and_settings(tmp_path):
+    import json
+    import sqlite3
+
+    from stockwatcher.ledger import Ledger
+    from stockwatcher.storage import SCHEMA, Store
+
+    path = tmp_path / "v1.sqlite3"
+    db = sqlite3.connect(path)
+    for statement in SCHEMA:
+        db.execute(statement)
+    db.execute("PRAGMA user_version=1")
+    db.execute("INSERT INTO settings VALUES ('notification_origin',?)", (json.dumps("original"),))
+    payload = json.dumps({"quantity": "2", "price": "100", "fee": "0", "note": "original"})
+    db.execute(
+        "INSERT INTO ledger_events(kind,instrument,event_date,payload,created_at) VALUES ('seed','US:MU','2026-01-01',?,'2026-01-01T00:00:00Z')",
+        (payload,),
+    )
+    db.commit()
+    db.close()
+    store = Store(path)
+    try:
+        assert store.rows("PRAGMA user_version")[0][0] == 2
+        assert store.get_setting("notification_origin") == "original"
+        assert Ledger(store).view().positions["US:MU"].quantity == 2
+        assert store.rows("SELECT * FROM analysis_runs") == []
+    finally:
+        store.close()

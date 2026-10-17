@@ -176,3 +176,30 @@ def test_after_termination_no_lazy_reinitialization(plugin_module):
         assert plugin.store is None
 
     asyncio.run(scenario())
+
+
+def test_preferences_stock_wizard_and_hint_flow_through_actual_entry(plugin_module):
+    async def scenario():
+        plugin = plugin_module.StockWatcherPlugin(object(), {})
+        try:
+            first = (await responses(plugin, "盯盘 设置"))[0]
+            assert "首次使用" in first
+            assert "首次使用" not in (await responses(plugin, "盯盘 设置"))[0]
+            assert (
+                "版本" in (await responses(plugin, "盯盘 设置 账户=现金 周期=180 允许加仓=否"))[0]
+            )
+            assert "个股目标" in (await responses(plugin, "盯盘 开始 MU"))[0]
+            assert (
+                "个股期待" in (await responses(plugin, "盯盘 回答 目标=200 目标期限=2026-12-31"))[0]
+            )
+            assert "待确认" in (await responses(plugin, '盯盘 回答 理由="长期 期待"'))[0]
+            assert "已生效" in (await responses(plugin, "盯盘 引导 确认"))[0]
+            assert '"target_price": "200"' in (await responses(plugin, "盯盘 设置 MU"))[0]
+            assert "候选" in (await responses(plugin, "盯盘 目标"))[0] or not plugin.store.rows(
+                "SELECT * FROM target_proposals"
+            )
+            assert "缺少" in (await responses(plugin, "盯盘 分析 MU 缓存"))[0]
+        finally:
+            await plugin.terminate()
+
+    asyncio.run(scenario())

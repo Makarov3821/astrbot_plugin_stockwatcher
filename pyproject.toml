@@ -1,6 +1,6 @@
 [project]
 name = "astrbot-plugin-stockwatcher"
-version = "0.1.0"
+version = "0.2.0"
 description = "Personal stock watcher for AstrBot"
 requires-python = ">=3.12"
 dependencies = ["httpx>=0.27,<1"]

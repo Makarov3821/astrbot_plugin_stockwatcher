@@ -34,7 +34,7 @@ def test_explicit_commands_and_duplicate_delivery(store, ledger):
             await commands.handle("/盯盘 成交 卖出 MU 数量=0.5 价格=110 日期=2026-01-02")
             assert "US:MU：1 股" in await commands.handle("/盯盘 持仓")
             assert "未知" in await commands.handle("/盯盘 现金")
-            assert "AI 尚未实现" in await commands.handle("/盯盘 状态")
+            assert "当前实例未配置研判服务" in await commands.handle("/盯盘 状态")
             await commands.handle("/盯盘 提醒目标 当前", origin="test:FriendMessage:123")
             assert store.get_setting("notification_origin") == "test:FriendMessage:123"
             assert "暂无" in await commands.handle("/盯盘 缓存 MU")

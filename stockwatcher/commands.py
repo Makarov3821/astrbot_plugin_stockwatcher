@@ -1,4 +1,4 @@
-"""Explicit phase 1-3 commands, independent of the messaging platform."""
+"""Explicit commands, independent of the messaging platform."""
 
 from __future__ import annotations
 
@@ -10,13 +10,22 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from . import __version__
+from .arguments import parse_options, required
 from .config import Settings
 from .domain import NEW_YORK, MarketBatch, ValidationError, instrument, text_number
 from .ledger import Ledger
 from .market import MarketService
 from .storage import SCHEMA_VERSION, Store
 
-HELP = """StockWatcher v0.1：持仓、账本和延迟行情
+HELP = """StockWatcher v0.2：个人设置、证据与 AI 研判
+/盯盘 开始 [MU] | 回答 ... | 引导 继续/暂停/返回/取消/确认
+/盯盘 设置 [MU] [周期=180 目标=... 目标期限=YYYY-MM-DD ...]
+/盯盘 大盘预期 偏多 期限=YYYY-MM-DD [基准=SPY 理由=...]
+/盯盘 材料 更新 MU | 列表 MU
+/盯盘 材料 添加 MU 链接=https://... 标题=... 发布时间=ISO时间 内容="原文摘要"
+/盯盘 分析 MU [缓存]
+/盯盘 分析记录 MU | 报告 分析ID
+/盯盘 目标 [采用|拒绝 候选ID]
 /盯盘 状态
 /盯盘 行情 MU [日线|分钟] [raw|split|dividend|all]
 /盯盘 缓存 MU [日线|分钟] [raw|split|dividend|all]
@@ -36,28 +45,15 @@ HELP = """StockWatcher v0.1：持仓、账本和延迟行情
 
 金额为 USD；碎股最多 8 位小数。日期按纽约交易日，同日按登记顺序。
 已有仓位用期初持仓登记，不扣现金；现金未知时不校验购买力。
-本版尚无 AI 建议、自动日报或持续盯盘。"""
-
-
-def parse_options(tokens: list[str], allowed: set[str]) -> dict[str, str]:
-    options = {}
-    for token in tokens:
-        key, separator, value = token.partition("=")
-        if not separator or key not in allowed or not value or key in options:
-            raise ValidationError(f"参数格式错误或重复：{key}。包含空格的参数请用引号包住。")
-        options[key] = value
-    return options
-
-
-def required(options: dict, key: str) -> str:
-    if key not in options:
-        raise ValidationError(f"缺少参数：{key}=...")
-    return options[key]
+AI 复用 AstrBot 模型，目标候选不会自动覆盖个人目标。本版尚无自动日报或持续盯盘。"""
 
 
 class Commands:
-    def __init__(self, store: Store, ledger: Ledger, market: MarketService, settings: Settings):
+    def __init__(
+        self, store: Store, ledger: Ledger, market: MarketService, settings: Settings, research=None
+    ):
         self.store, self.ledger, self.market, self.settings = store, ledger, market, settings
+        self.research = research
 
     def status(self) -> str:
         view = self.ledger.view()
@@ -69,7 +65,12 @@ class Commands:
             f"Alpaca：{configured}；账户模式 {self.settings.account_mode}\n"
             f"行情：SIP 历史接口，查询至少延迟 {self.settings.delay_minutes} 分钟\n"
             f"提醒目标：{'已设置' if self.store.get_setting('notification_origin') else '未设置'}\n"
-            "当前只支持手动查询和账本，自动盯盘、策略与 AI 尚未实现。"
+            + (
+                "AI：复用当前会话或指定的 AstrBot 模型；实际可用性需运行分析验证。"
+                if self.research
+                else "AI：当前实例未配置研判服务。"
+            )
+            + "\n自动盯盘与日报尚未实现。"
         )
 
     def holdings(self) -> str:
@@ -239,6 +240,10 @@ class Commands:
             tokens.pop(0)
         if not tokens or tokens == ["帮助"] or tokens == ["help"]:
             return HELP
+        if self.research is not None:
+            response = await self.research.handle(tokens, origin=origin, request_key=request_key)
+            if response is not None:
+                return response
         if tokens[0] in {"行情", "缓存"}:
             if not 2 <= len(tokens) <= 4:
                 raise ValidationError("用法：/盯盘 行情 MU [日线|分钟] [raw|split|dividend|all]")

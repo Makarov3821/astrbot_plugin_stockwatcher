@@ -1,20 +1,153 @@
 {
   "alpaca_key_id": {
-    "description": "Alpaca API Key ID", "type": "string", "secret": true, "default": "",
+    "description": "Alpaca API Key ID",
+    "type": "string",
+    "secret": true,
+    "default": "",
     "hint": "可留空并使用 APCA_API_KEY_ID 环境变量；不要在聊天中发送凭证。"
   },
   "alpaca_secret_key": {
-    "description": "Alpaca Secret Key", "type": "string", "secret": true, "default": "",
+    "description": "Alpaca Secret Key",
+    "type": "string",
+    "secret": true,
+    "default": "",
     "hint": "可留空并使用 APCA_API_SECRET_KEY 环境变量；配置页遮罩不等于文件加密。"
   },
   "alpaca_account_mode": {
-    "description": "Alpaca 凭证所属账户", "type": "string", "options": ["paper", "live"], "default": "paper",
+    "description": "Alpaca 凭证所属账户",
+    "type": "string",
+    "options": [
+      "paper",
+      "live"
+    ],
+    "default": "paper",
     "hint": "仅用于选择交易日历的只读接口，不会提交订单。"
   },
   "delay_minutes": {
-    "description": "免费 SIP 查询延迟（分钟）", "type": "int", "default": 16,
+    "description": "免费 SIP 查询延迟（分钟）",
+    "type": "int",
+    "default": 16,
     "hint": "至少 16 分钟，给免费历史查询保留缓冲；不代表承诺提醒恰好延迟 16 分钟。"
   },
-  "request_timeout_seconds": {"description": "单次行情请求超时（秒）", "type": "int", "default": 15},
-  "display_timezone": {"description": "展示时区", "type": "string", "default": "Asia/Shanghai"}
+  "request_timeout_seconds": {
+    "description": "单次行情请求超时（秒）",
+    "type": "int",
+    "default": 15
+  },
+  "display_timezone": {
+    "description": "展示时区",
+    "type": "string",
+    "default": "Asia/Shanghai"
+  },
+  "sec_user_agent": {
+    "description": "SEC 请求标识与联系邮箱",
+    "type": "string",
+    "default": "",
+    "hint": "例如 StockWatcher your-real-email@example.com；留空时公告接口保持未配置，不伪造联系信息。"
+  },
+  "ir_allowed_hosts": {
+    "description": "允许抓取的公司 IR 域名",
+    "type": "list",
+    "default": [
+      "investors.micron.com"
+    ],
+    "hint": "仅填写已确认的公司官网域名；不自动抓取新闻正文中的任意链接。"
+  },
+  "model_provider_id": {
+    "description": "AstrBot 模型提供商 ID",
+    "type": "string",
+    "default": "",
+    "hint": "留空使用当前聊天配置的模型；不需要新增模型密钥。"
+  },
+  "model_timeout_seconds": {
+    "description": "AI 单次研判超时（秒）",
+    "type": "int",
+    "default": 90
+  },
+  "investment_defaults": {
+    "description": "个人投资默认设置",
+    "type": "object",
+    "items": {
+      "account_type": {
+        "description": "账户类型",
+        "type": "string",
+        "default": "unknown",
+        "options": [
+          "unknown",
+          "cash",
+          "margin"
+        ]
+      },
+      "strategy": {
+        "description": "默认策略",
+        "type": "string",
+        "default": "trend_v1",
+        "options": [
+          "trend_v1"
+        ]
+      },
+      "horizon_days": {
+        "description": "默认观察周期（天）",
+        "type": "int",
+        "default": 60
+      },
+      "allow_add": {
+        "description": "已有持仓是否允许加仓",
+        "type": "string",
+        "default": "unset",
+        "options": [
+          "unset",
+          "true",
+          "false"
+        ]
+      },
+      "max_stock_pct": {
+        "description": "单股仓位上限（百分数）",
+        "type": "string",
+        "default": "",
+        "hint": "留空表示未知，0 是禁止新增该风险。"
+      },
+      "max_total_pct": {
+        "description": "总仓位上限（百分数）",
+        "type": "string",
+        "default": ""
+      },
+      "risk_budget_pct": {
+        "description": "单次风险预算（账户百分数）",
+        "type": "string",
+        "default": ""
+      },
+      "drawdown_pct": {
+        "description": "回撤阈值（百分数）",
+        "type": "string",
+        "default": ""
+      },
+      "drawdown_basis": {
+        "description": "回撤参考基准",
+        "type": "string",
+        "default": "unset",
+        "options": [
+          "unset",
+          "cost",
+          "holding_high",
+          "rolling20_high"
+        ]
+      },
+      "drawdown_effect": {
+        "description": "触及回撤阈值后的处理",
+        "type": "string",
+        "default": "review",
+        "options": [
+          "review",
+          "exit"
+        ]
+      },
+      "notification_time": {
+        "description": "未来日报时间偏好",
+        "type": "string",
+        "default": "07:30",
+        "hint": "按展示时区解释；本版只保存偏好，尚不自动推送。"
+      }
+    }
+  }
 }
