@@ -1,0 +1,20 @@
+{
+  "alpaca_key_id": {
+    "description": "Alpaca API Key ID", "type": "string", "secret": true, "default": "",
+    "hint": "可留空并使用 APCA_API_KEY_ID 环境变量；不要在聊天中发送凭证。"
+  },
+  "alpaca_secret_key": {
+    "description": "Alpaca Secret Key", "type": "string", "secret": true, "default": "",
+    "hint": "可留空并使用 APCA_API_SECRET_KEY 环境变量；配置页遮罩不等于文件加密。"
+  },
+  "alpaca_account_mode": {
+    "description": "Alpaca 凭证所属账户", "type": "string", "options": ["paper", "live"], "default": "paper",
+    "hint": "仅用于选择交易日历的只读接口，不会提交订单。"
+  },
+  "delay_minutes": {
+    "description": "免费 SIP 查询延迟（分钟）", "type": "int", "default": 16,
+    "hint": "至少 16 分钟，给免费历史查询保留缓冲；不代表承诺提醒恰好延迟 16 分钟。"
+  },
+  "request_timeout_seconds": {"description": "单次行情请求超时（秒）", "type": "int", "default": 15},
+  "display_timezone": {"description": "展示时区", "type": "string", "default": "Asia/Shanghai"}
+}

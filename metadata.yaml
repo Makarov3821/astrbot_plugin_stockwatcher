@@ -1,0 +1,6 @@
+name: astrbot_plugin_stockwatcher
+display_name: StockWatcher 私人盯盘助理
+desc: 美股持仓与关注管理、手工成交账本及免费延迟行情查询。AI 研判和自动盯盘将在后续版本加入。
+version: v0.1.0
+author: Makarov3821
+astrbot_version: ">=4.28.2,<5"

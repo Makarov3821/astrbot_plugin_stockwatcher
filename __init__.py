@@ -1,0 +1,1 @@
+"""AstrBot StockWatcher plugin."""
