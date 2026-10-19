@@ -52,6 +52,12 @@ class ResearchCommands:
         self, tokens: list[str], *, origin: str, request_key: str | None
     ) -> str | None:
         command = tokens[0]
+        if command == "用量" and len(tokens) == 1:
+            if not hasattr(self.analysis.model, "stats"):
+                return "当前入口未配置模型预算统计。"
+            return json.dumps(
+                await asyncio.to_thread(self.analysis.model.stats), ensure_ascii=False, indent=2
+            )
         if self.monitor is not None and command in {"监控", "日报", "计划", "通知"}:
             return await self._monitor_command(tokens)
         if command == "开始" and len(tokens) in {1, 2}:
@@ -149,7 +155,7 @@ class ResearchCommands:
                 )
                 return f"材料 {evidence_id} 已保存为用户提供、未经抓取核验的备注；不会冒充已核实财务指标。"
             raise ValidationError("材料操作为 更新/列表/添加。")
-        if command == "分析" and 2 <= len(tokens) <= 3:
+        if command in {"分析", "深度"} and 2 <= len(tokens) <= 3:
             if len(tokens) == 3 and tokens[2] != "缓存":
                 raise ValidationError("第三个参数仅支持 缓存；默认联网查询并刷新证据。")
             report = await self.analysis.analyze(
@@ -157,6 +163,7 @@ class ResearchCommands:
                 origin=origin,
                 cached=len(tokens) == 3,
                 request_key=f"analysis:{request_key}" if request_key else None,
+                deep=command == "深度",
             )
             if (
                 self.monitor is not None

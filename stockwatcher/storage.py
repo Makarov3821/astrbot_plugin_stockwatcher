@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .domain import MarketBatch, ValidationError
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 SCHEMA = (
     "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
     """CREATE TABLE ledger_events (
@@ -69,6 +69,14 @@ MONITOR_SCHEMA = (
         expires_at TEXT NOT NULL, last_error TEXT, guard_json TEXT)""",
 )
 
+MODEL_SCHEMA = (
+    """CREATE TABLE model_calls (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, budget_day TEXT NOT NULL,
+        purpose TEXT NOT NULL, status TEXT NOT NULL, reserved_tokens INTEGER NOT NULL,
+        input_chars INTEGER NOT NULL, output_limit INTEGER NOT NULL, usage TEXT, metadata TEXT)""",
+    "CREATE INDEX model_budget ON model_calls(budget_day)",
+)
+
 
 class Store:
     def __init__(self, path: Path | str):
@@ -95,6 +103,10 @@ class Store:
                     version = 2
                 if version == 2:
                     for statement in MONITOR_SCHEMA:
+                        db.execute(statement)
+                    version = 3
+                if version == 3:
+                    for statement in MODEL_SCHEMA:
                         db.execute(statement)
                 db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         except BaseException:

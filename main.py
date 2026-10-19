@@ -11,8 +11,10 @@ from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.star import Context, Star, StarTools
 
 from .stockwatcher.analysis import AnalysisService
+from .stockwatcher.budget import BudgetedModel
 from .stockwatcher.commands import Commands
 from .stockwatcher.config import Settings
+from .stockwatcher.deep import DeepResearch
 from .stockwatcher.delivery import Delivery, message_parts
 from .stockwatcher.domain import ValidationError
 from .stockwatcher.evidence import EvidenceStore
@@ -70,14 +72,18 @@ class StockWatcherPlugin(Star):
                     ir_hosts=self.settings.ir_allowed_hosts,
                 )
                 sources = SourceService(self.store, evidence, self.public_sources, self.provider)
-                model = AstrBotModel(
+                adapter = AstrBotModel(
                     self.context,
                     provider_id=self.settings.model_provider_id,
                     timeout_seconds=self.settings.model_timeout_seconds,
+                    concurrency=self.settings.deep_concurrency,
                 )
+                model = BudgetedModel(adapter, self.store, self.settings)
                 analysis = AnalysisService(
                     self.store, profiles, ledger, market, evidence, sources, model
                 )
+                analysis.deep_engine = DeepResearch(model, self.settings)
+                analysis.max_model_input_chars = self.settings.model_max_input_chars
                 self.research = ResearchCommands(self.store, profiles, evidence, sources, analysis)
                 self.monitor = Monitor(
                     analysis,

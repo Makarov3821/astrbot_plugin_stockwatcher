@@ -17,11 +17,15 @@ class ModelReply:
 
 
 class AstrBotModel:
-    def __init__(self, context, *, provider_id: str = "", timeout_seconds: int = 90):
+    def __init__(
+        self, context, *, provider_id: str = "", timeout_seconds: int = 90, concurrency: int = 1
+    ):
         self.context, self.provider_id, self.timeout_seconds = context, provider_id, timeout_seconds
-        self._limit = asyncio.Semaphore(1)
+        self._limit = asyncio.Semaphore(concurrency)
 
-    async def generate(self, system: str, prompt: str, origin: str) -> ModelReply:
+    async def generate(
+        self, system: str, prompt: str, origin: str, *, max_output_tokens: int | None = None
+    ) -> ModelReply:
         async with self._limit:
             try:
                 async with asyncio.timeout(self.timeout_seconds):
@@ -36,6 +40,11 @@ class AstrBotModel:
                         system_prompt=system,
                         contexts=[],
                         tools=None,
+                        **(
+                            {"max_tokens": max_output_tokens}
+                            if max_output_tokens is not None
+                            else {}
+                        ),
                     )
                     if getattr(response, "role", "assistant") not in {"assistant", "model"}:
                         raise ModelUnavailable("模型没有返回正常的助手结果。")

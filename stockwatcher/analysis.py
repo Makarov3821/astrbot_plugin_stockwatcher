@@ -9,6 +9,7 @@ import re
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+from .budget import compact_packet
 from .domain import NEW_YORK, ValidationError, amount, instrument, iso, parse_time
 from .evidence import EvidenceStore
 from .features import metrics, quantity_cap, risk_context
@@ -278,6 +279,8 @@ class AnalysisService:
         self.store, self.profiles, self.ledger, self.market = store, profiles, ledger, market
         self.evidence, self.sources, self.model = evidence, sources, model
         self._lock = asyncio.Lock()
+        self.deep_engine = None
+        self.max_model_input_chars = 24000
 
     async def analyze(
         self,
@@ -288,6 +291,7 @@ class AnalysisService:
         request_key: str | None = None,
         now: datetime | None = None,
         program_only: bool = False,
+        deep: bool = False,
     ) -> dict:
         frozen_clock = now is not None
         symbol, now = instrument(symbol), now or datetime.now(UTC)
@@ -402,6 +406,7 @@ class AnalysisService:
                 "market_asof": market_asof,
                 "market_fresh": fresh,
                 "market_mode": "explicit_cache" if cached else "delayed_query",
+                "research_mode": "deep" if deep else "single",
                 "market_snapshots": {"raw": raw.as_dict(), "adjusted": adjusted.as_dict()},
                 "metrics": calculated,
                 "preference": profile,
@@ -470,15 +475,33 @@ class AnalysisService:
                 result["summary"] = "程序巡检观察；本次未调用 AI。"
             elif self.model is not None:
                 try:
-                    reply = await self.model.generate(
+                    model_packet = compact_packet(model_packet, self.max_model_input_chars)
+                    packet["model_input_evidence"] = [
+                        {
+                            "evidence_id": item["evidence_id"],
+                            "version": item["version"],
+                            "supplied_chars": len(item["content"]),
+                            "truncated": item.get("prompt_truncated", False),
+                        }
+                        for item in model_packet["evidence"]["items"]
+                    ]
+                    engine = self.deep_engine if deep else self.model
+                    if engine is None:
+                        raise ModelUnavailable("当前入口尚未配置深度研究。")
+                    reply = await engine.generate(
                         SYSTEM, json.dumps(model_packet, ensure_ascii=False), origin
                     )
                     raw_response = reply.text[:40000]
                     model_metadata.update(reply.metadata)
                     result = validate_reply(reply, model_packet, now)
+                    if reply.metadata.get("research", {}).get("errors"):
+                        result["warnings"].append(
+                            "深度研究存在缺失角色；保留失败信息和独立观点，汇总不代表所有角色已完成。"
+                        )
                     status = "validated"
                 except (ModelUnavailable, ValidationError) as exc:
                     result["warnings"].append(str(exc))
+                    model_metadata.update(getattr(exc, "metadata", {}))
             else:
                 result["warnings"].append("尚未提供 AstrBot 模型适配器")
             # Re-read revisions after awaits: an obsolete analysis must not become a new active proposal.
@@ -643,6 +666,16 @@ class AnalysisService:
         if result.get("thesis"):
             lines.append("持有逻辑：" + json.dumps(result["thesis"], ensure_ascii=False))
             lines.append("AI 事件判断：" + json.dumps(result["event_risk"], ensure_ascii=False))
+        research = report["model"].get("research")
+        if research:
+            lines.append("深度研究：角色意见共用证据，分歧不等于概率。")
+            for role, data in research["roles"].items():
+                lines.append(
+                    f"{role} / {data['horizon_days']}天 / {data['stance']}："
+                    + data["arguments"][0]["text"]
+                )
+            for role, reason in research["errors"].items():
+                lines.append(f"角色缺失 {role}：{reason}")
         if result.get("target_proposal"):
             proposals = self.store.rows(
                 "SELECT id,status FROM target_proposals WHERE analysis_id=?", (report["id"],)
