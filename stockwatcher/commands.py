@@ -17,8 +17,8 @@ from .ledger import Ledger
 from .market import MarketService
 from .storage import SCHEMA_VERSION, Store
 
-HELP = """StockWatcher v0.4：个人设置、证据与 AI 研判
-/盯盘 监控 [开启|关闭|状态|巡检]
+HELP = """StockWatcher v0.5：个人设置、证据与 AI 研判
+/盯盘 监控 [开启|关闭|状态|巡检|重试]
 /盯盘 监控 设置 免扰开始=22:00 免扰结束=07:00 自动采用=否
 /盯盘 日报 开启/关闭/AI开启/AI关闭
 /盯盘 计划 [采用 报告ID|取消 计划ID]
@@ -31,6 +31,7 @@ HELP = """StockWatcher v0.4：个人设置、证据与 AI 研判
 /盯盘 分析 MU [缓存]
 /盯盘 深度 MU [缓存]
 /盯盘 用量
+/盯盘 备份 [列表]
 /盯盘 分析记录 MU | 报告 分析ID
 /盯盘 目标 [采用|拒绝 候选ID]
 /盯盘 状态

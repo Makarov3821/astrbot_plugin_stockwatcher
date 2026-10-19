@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import uuid
+from datetime import UTC, datetime
 
 from .analysis import AnalysisService
 from .arguments import parse_options, required
@@ -52,6 +54,23 @@ class ResearchCommands:
         self, tokens: list[str], *, origin: str, request_key: str | None
     ) -> str | None:
         command = tokens[0]
+        if command == "备份":
+            if tokens[1:] == ["列表"]:
+                paths = sorted((self.store.path.parent / "backups").glob("*.sqlite3"), reverse=True)
+                return "本地备份（含个人持仓数据，不通过消息发送文件）：\n" + "\n".join(
+                    path.name for path in paths[:20]
+                )
+            if len(tokens) != 1:
+                raise ValidationError(
+                    "用法：备份 [列表]；恢复需停用插件后使用本地 maintenance 命令。"
+                )
+            name = (
+                datetime.now(UTC).strftime("stockwatcher-%Y%m%dT%H%M%SZ-")
+                + uuid.uuid4().hex[:8]
+                + ".sqlite3"
+            )
+            await asyncio.to_thread(self.store.backup, self.store.path.parent / "backups" / name)
+            return f"本地一致性备份已保存：backups/{name}。不会发送私有数据文件；恢复步骤见 docs/INSTALL_TEST.md。"
         if command == "用量" and len(tokens) == 1:
             if not hasattr(self.analysis.model, "stats"):
                 return "当前入口未配置模型预算统计。"
@@ -220,6 +239,9 @@ class ResearchCommands:
                 )
             if tokens[1:] == ["巡检"]:
                 return json.dumps(await self.monitor.tick(), ensure_ascii=False)
+            if tokens[1:] == ["重试"]:
+                count = await asyncio.to_thread(self.monitor.retry_jobs)
+                return f"已重置 {count} 个失败作业；下轮只运行当前交易日适用任务。"
             if len(tokens) >= 3 and tokens[1] == "设置":
                 options = parse_options(tokens[2:], {"免扰开始", "免扰结束", "自动采用"})
                 patch = {}
@@ -281,8 +303,6 @@ class ResearchCommands:
                     number = int(tokens[2])
                 except ValueError as exc:
                     raise ValidationError("通知 ID 应为整数。") from exc
-                from datetime import UTC, datetime
-
                 await asyncio.to_thread(self.monitor.delivery.retry, number, datetime.now(UTC))
                 return "失败通知已排队，遵守监控开关、有效期及免打扰设置。"
         raise ValidationError(

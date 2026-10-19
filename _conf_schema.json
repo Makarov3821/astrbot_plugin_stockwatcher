@@ -143,10 +143,10 @@
         ]
       },
       "notification_time": {
-        "description": "未来日报时间偏好",
+        "description": "日报时间偏好",
         "type": "string",
         "default": "07:30",
-        "hint": "按展示时区解释；本版只保存偏好，尚不自动推送。"
+        "hint": "按展示时区解释；另用 /盯盘 监控 开启 和 /盯盘 日报 开启 才订阅。"
       }
     }
   },

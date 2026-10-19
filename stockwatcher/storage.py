@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
+import tempfile
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -76,6 +78,27 @@ MODEL_SCHEMA = (
         input_chars INTEGER NOT NULL, output_limit INTEGER NOT NULL, usage TEXT, metadata TEXT)""",
     "CREATE INDEX model_budget ON model_calls(budget_day)",
 )
+
+
+def atomic_database(destination: Path, writer):
+    """Create a new database without overwriting a pre-existing path."""
+    destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=".stockwatcher-", suffix=".sqlite3", dir=destination.parent
+    )
+    os.close(descriptor)
+    temporary = Path(temporary)
+    try:
+        writer(temporary)
+        os.chmod(temporary, 0o600)
+        with temporary.open("rb") as handle:
+            os.fsync(handle.fileno())
+        os.link(temporary, destination)  # atomic and refuses an existing destination
+    finally:
+        temporary.unlink(missing_ok=True)
+        for suffix in ("-wal", "-shm", "-journal"):
+            Path(str(temporary) + suffix).unlink(missing_ok=True)
 
 
 class Store:
@@ -170,3 +193,19 @@ class Store:
             if not self._closed:
                 self._db.close()
                 self._closed = True
+
+    def backup(self, destination: Path) -> Path:
+        def write(path):
+            with self._lock:
+                if self._closed:
+                    raise RuntimeError("Store is closed")
+                target = sqlite3.connect(path)
+                try:
+                    self._db.backup(target)
+                    if target.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+                        raise ValidationError("备份完整性检查失败。")
+                finally:
+                    target.close()
+
+        atomic_database(destination, write)
+        return destination

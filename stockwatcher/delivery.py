@@ -184,7 +184,14 @@ class Delivery:
                             (row["id"],),
                         )
                         if (
-                            not await asyncio.to_thread(self._context_ok, row)
+                            parse_time(row["expires_at"]) <= (now if frozen else datetime.now(UTC))
+                            or in_quiet_hours(
+                                now if frozen else datetime.now(UTC),
+                                self.timezone,
+                                latest["quiet_start"],
+                                latest["quiet_end"],
+                            )
+                            or not await asyncio.to_thread(self._context_ok, row)
                             or not latest["enabled"]
                             or target != row["origin"]
                             or state[0]["status"] != "sending"
@@ -218,7 +225,7 @@ class Delivery:
         attempts = row["attempts"] + 1
         with self.store.transaction() as db:
             db.execute(
-                "UPDATE notification_outbox SET attempts=?,status=?,next_at=?,lease_until=NULL,last_error=? WHERE id=?",
+                "UPDATE notification_outbox SET attempts=?,status=?,next_at=?,lease_until=NULL,last_error=? WHERE id=? AND status='sending'",
                 (
                     attempts,
                     "failed" if attempts >= 5 else "pending",

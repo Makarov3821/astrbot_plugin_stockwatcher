@@ -259,3 +259,53 @@ def test_changed_preferences_cancel_pending_plan_trigger_messages(store, ledger)
     profiles.update({"allow_add": False})
     monitor.reconcile(now=now)
     assert {row[0] for row in store.rows("SELECT status FROM notification_outbox")} == {"cancelled"}
+
+
+@pytest.mark.parametrize("mode", ["fresh", "stale", "future", "extended"])
+def test_intraday_patrol_requires_current_complete_regular_minutes(store, ledger, mode):
+    monitor, analysis, profiles = setup(store, ledger)
+    ledger.record("seed", symbol="MU", quantity="1", price="200", day="2026-01-01")
+    profiles.update({"hard_stop_price": "175"}, symbol="MU")
+    monitor.configure({"enabled": True, "quiet_start": "00:00", "quiet_end": "00:00"})
+    at = NOW.replace(hour=17)
+
+    class MinuteMarket(FakeMarket):
+        async def query(self, symbol, *, timeframe="1Day", now=None, **kwargs):
+            assert timeframe == "1Min"
+            stamp = at - timedelta(
+                minutes=17
+                if mode == "fresh"
+                else 30
+                if mode == "stale"
+                else 15
+                if mode == "future"
+                else 17
+            )
+            minute = Bar(stamp, D(169), D(170), D(168), D(169), D(100))
+            return replace(
+                batch(adjustment="raw"),
+                timeframe="1Min",
+                session="extended" if mode == "extended" else "regular",
+                requested_end=at - timedelta(minutes=16),
+                fetched_at=at,
+                bars=(minute,),
+            )
+
+    monitor.market = analysis.market = MinuteMarket()
+    result = asyncio.run(monitor.tick(now=at))
+    risk_rows = store.rows("SELECT * FROM notification_outbox WHERE event_key LIKE 'risk:%'")
+    assert bool(risk_rows) == (mode == "fresh")
+    assert bool(result["gaps"]) != (mode == "fresh")
+
+
+def test_price_gap_across_two_minutes_does_not_fabricate_touch(store, ledger):
+    monitor, analysis, _ = setup(store, ledger)
+    adopt(monitor, analysis)
+    after = NOW + timedelta(hours=1)
+    bars = (
+        Bar(after, D(180), D(181), D(179), D(180), D(100)),
+        Bar(after + timedelta(minutes=1), D(150), D(151), D(149), D(150), D(100)),
+    )
+    minute = replace(batch(adjustment="raw"), timeframe="1Min", session="regular", bars=bars)
+    monitor._evaluate("US:MU", minute, after + timedelta(minutes=2))
+    assert store.rows("SELECT state FROM monitor_plans")[0][0] == "waiting"

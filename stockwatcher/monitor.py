@@ -184,7 +184,7 @@ class Monitor:
                 f"计划 #{plan['id']} {plan['instrument']}：{state}\n{reason}\n行情时点 {asof or '无新增行情'}；不自动下单或改持仓。",
                 now,
                 ttl_hours=max(
-                    0.01, min(24, (parse_time(plan["expires_at"]) - now).total_seconds() / 3600)
+                    0, min(24, (parse_time(plan["expires_at"]) - now).total_seconds() / 3600)
                 )
                 if state in {"armed", "triggered"}
                 else 24,
@@ -207,6 +207,13 @@ class Monitor:
                 (f"plan:{plan_id}:%",),
             )
         return bool(changed)
+
+    def retry_jobs(self):
+        with self.store.transaction() as db:
+            return db.execute(
+                "UPDATE monitor_jobs SET status='retry',attempts=0,next_at=? WHERE status='failed'",
+                (iso(datetime.now(UTC)),),
+            ).rowcount
 
     def symbols(self):
         held = sorted(key for key, pos in self.ledger.view().positions.items() if pos.quantity > 0)
@@ -308,7 +315,6 @@ class Monitor:
                     > parse_time(plan["created_at"]).astimezone(NEW_YORK).date()
                 )
                 low = min(item.low for item in eligible) if whole_day else bar.close
-                high = max(item.high for item in eligible) if whole_day else bar.close
                 if low <= Decimal(entry["invalid_below"]):
                     self._transition(
                         db,
@@ -319,7 +325,14 @@ class Monitor:
                         asof=asof,
                     )
                     continue
-                touched = low <= Decimal(entry["upper"]) and high >= Decimal(entry["lower"])
+                touched = (
+                    any(
+                        item.low <= Decimal(entry["upper"]) and item.high >= Decimal(entry["lower"])
+                        for item in eligible
+                    )
+                    if whole_day
+                    else Decimal(entry["lower"]) <= bar.close <= Decimal(entry["upper"])
+                )
                 if plan["state"] == "waiting" and touched:
                     self._transition(
                         db,
@@ -401,10 +414,12 @@ class Monitor:
                             batch = await self.market.query(symbol, timeframe="1Min", now=now)
                             if (
                                 not batch.bars
+                                or (frozen and batch.fetched_at > now)
                                 or batch.session != "regular"
                                 or batch.adjustment != "raw"
                                 or batch.bars[-1].timestamp + timedelta(minutes=1) > cutoff
-                                or batch.bars[-1].timestamp < cutoff - timedelta(minutes=3)
+                                or batch.bars[-1].timestamp
+                                < min(cutoff, today.closes_at) - timedelta(minutes=3)
                             ):
                                 result["gaps"].append(f"{symbol} 分钟行情不够新近，未触发")
                             else:

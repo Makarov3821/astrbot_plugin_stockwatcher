@@ -1,0 +1,25 @@
+{
+  "alpaca_key_id": "",
+  "alpaca_secret_key": "",
+  "alpaca_account_mode": "paper",
+  "sec_user_agent": "",
+  "model_provider_id": "",
+  "display_timezone": "Asia/Shanghai",
+  "monitor_poll_seconds": 300,
+  "monitor_max_symbols": 5,
+  "model_daily_calls": 24,
+  "model_daily_token_budget": 200000,
+  "model_max_output_tokens": 2048,
+  "deep_concurrency": 2,
+  "deep_timeout_seconds": 300,
+  "investment_defaults": {
+    "account_type": "unknown",
+    "strategy": "trend_v1",
+    "horizon_days": 60,
+    "allow_add": "unset",
+    "max_stock_pct": "",
+    "max_total_pct": "",
+    "risk_budget_pct": "",
+    "notification_time": "07:30"
+  }
+}

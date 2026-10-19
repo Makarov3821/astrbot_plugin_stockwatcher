@@ -235,7 +235,7 @@ def validate_reply(reply: ModelReply, packet: dict, now: datetime) -> dict:
             upper=str(upper),
             invalid_below=str(stop),
             whole_share_gross_cap=quantity_cap(context, upper, stop),
-            monitoring="未启用；第08步实现",
+            monitoring="未启用；可用 /盯盘 计划 采用 报告ID 保存候选监控",
         )
     final_action = data["action"]
     if context["hard_exit_reasons"] and packet["market_fresh"]:
@@ -632,7 +632,7 @@ class AnalysisService:
                 ("accepted" if adopt else "rejected", iso(now), proposal_id),
             )
         return (
-            "目标已更新并保留旧设置版本；尚未启动自动监控。"
+            "目标已更新并保留旧设置版本；旧条件需重新分析采用。"
             if adopt
             else "已保留个人原目标，候选标记为拒绝。"
         )
@@ -689,8 +689,17 @@ class AnalysisService:
                     f"候选 #{proposals[0]['id']} [{proposals[0]['status']}]；可用 /盯盘 目标 采用 {proposals[0]['id']} 或 拒绝。"
                 )
         if result.get("entry"):
+            plans = self.store.rows(
+                "SELECT id,state,reason FROM monitor_plans WHERE analysis_id=?", (report["id"],)
+            )
+            monitoring = (
+                f"计划 #{plans[0]['id']} [{plans[0]['state']}]：{plans[0]['reason']}"
+                if plans
+                else "未采用；尚未监控"
+            )
             lines.append(
-                "候选入场计划（尚未监控）：" + json.dumps(result["entry"], ensure_ascii=False)
+                "候选入场计划："
+                + json.dumps({**result["entry"], "monitoring": monitoring}, ensure_ascii=False)
             )
         for condition in result.get("invalidations", []):
             lines.append("失效/复核：" + condition)
