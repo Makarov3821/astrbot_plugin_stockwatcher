@@ -98,7 +98,7 @@ class Settings:
                     or os.environ.get("STOCKWATCHER_SEC_USER_AGENT", "")
                 ).strip(),
                 ir_allowed_hosts=tuple(config.get("ir_allowed_hosts", ["investors.micron.com"])),
-                model_provider_id=str(config.get("model_provider_id", "")),
+                model_provider_id=str(config.get("model_provider_id") or "").strip(),
                 model_timeout_seconds=int(config.get("model_timeout_seconds", 90)),
                 monitor_poll_seconds=int(config.get("monitor_poll_seconds", 300)),
                 monitor_max_symbols=int(config.get("monitor_max_symbols", 5)),

@@ -56,6 +56,7 @@
   "model_provider_id": {
     "description": "AstrBot 模型提供商 ID",
     "type": "string",
+    "_special": "select_provider",
     "default": "",
     "hint": "留空使用当前聊天配置的模型；不需要新增模型密钥。"
   },

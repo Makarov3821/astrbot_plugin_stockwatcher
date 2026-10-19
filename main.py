@@ -45,6 +45,7 @@ class StockWatcherPlugin(Star):
         self._worker: asyncio.Task | None = None
 
     async def initialize(self) -> None:
+        """打开宿主数据目录并启动可取消的巡检任务；未订阅时不请求行情。"""
         async with self._init_lock:
             if self.commands is not None or self._closing:
                 return
@@ -135,6 +136,7 @@ class StockWatcherPlugin(Star):
 
     @filter.command("盯盘", alias={"stockwatch"})
     async def stockwatch(self, event: AstrMessageEvent):
+        """个人盯盘助理：持仓与关注、偏好引导、行情研判、监控和日报。"""
         if self._closing:
             yield event.plain_result("StockWatcher 正在关闭，请稍后重试。")
             return
@@ -174,6 +176,7 @@ class StockWatcherPlugin(Star):
             )
 
     async def terminate(self) -> None:
+        """卸载或重载时等待任务取消，再关闭网络客户端与数据库。"""
         self._closing = True
         async with self._init_lock:
             tasks = list(self._tasks)

@@ -1,14 +1,14 @@
-# v0.5.0 首次安装与试用
+# v0.5.1 首次安装与试用
 
 这是首个可安装测试版。离线测试已覆盖关键链路，真实平台、模型输出和免费数据权限留待你的环境验收；功能完成不代表策略收益已验证。先用一只关注股和少量真实记录试用。
 
 ## 安装
 
 1. 使用 Python 3.12+ 的 AstrBot。推荐先用接口核对过的 `4.29.1` 或兼容更新版本；声明的范围不代表所有版本均已实测。
-2. 从开发机 `dist/` 取 `astrbot_plugin_stockwatcher-v0.5.0.zip` 和同名 `.sha256`。可用 `sha256sum -c astrbot_plugin_stockwatcher-v0.5.0.zip.sha256` 核对。
+2. 从开发机 `dist/` 取 `astrbot_plugin_stockwatcher-v0.5.1.zip` 和同名 `.sha256`。可用 `sha256sum -c astrbot_plugin_stockwatcher-v0.5.1.zip.sha256` 核对。
 3. 在 AstrBot 插件管理的本地 ZIP 安装入口上传。也可将 ZIP 中的 `astrbot_plugin_stockwatcher` 文件夹放入宿主 `data/plugins/`，确保 `main.py` 直接位于该文件夹下，不要套两层目录。
 4. 安装 `requirements.txt` 依赖并重载插件。宿主无法自动安装时，在其实际 Python 环境执行 `python -m pip install -r data/plugins/astrbot_plugin_stockwatcher/requirements.txt`。Docker 用户在容器使用的环境安装，勿只装在宿主机另一个 Python 中。
-5. 发 `/盯盘 帮助`、`/盯盘 状态`。出现 `StockWatcher 0.5.0` 与数据库版本 `4` 即完成入口和存储的第一项检查。
+5. 发 `/盯盘 帮助`、`/盯盘 状态`。出现 `StockWatcher 0.5.1` 与数据库版本 `4` 即完成入口和存储的第一项检查。
 
 ZIP 不包含 AstrBot 源码、开发环境或数据库，运行不依赖开发机的 `astrbot-temp` 软链接。包内 `RELEASE_MANIFEST.json` 记录源提交、源码是否有未提交变动及逐文件哈希。重新打包可在仓库根目录执行 `python scripts/build_release.py`。
 

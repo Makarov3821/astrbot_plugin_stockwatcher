@@ -2,7 +2,7 @@
 
 本记录区分已实现、离线验证和真实环境验收。计划基线已作为首个提交 `c459cf3` 保存。
 
-累计离线结果：v0.1 为 66 项，v0.2 为 137 项，v0.3 为 151 项，v0.4 为 159 项，当前 v0.5 为 **172 项通过**。`ruff check`、`ruff format --check`、`compileall` 和 `git diff --check` 通过。CLI 无凭证路径返回退出码 `2`、`status=not_verified`、`code=credentials_missing`；未以样例替代真实认证行情或模型验收。
+累计离线结果：v0.1 为 66 项，v0.2 为 137 项，v0.3 为 151 项，v0.4 为 159 项，v0.5.0 为 172 项。当前 v0.5.1 为 **176 项通过**，其中额外 4 项直接核对共享上游源码的注册/指令组件，其他依赖为替身，不是完整宿主运行；缺少可选共享源码时这 4 项明确跳过。`ruff check`、`ruff format --check`、`compileall` 和 `git diff --check` 通过。CLI 无凭证路径返回退出码 `2`、`status=not_verified`、`code=credentials_missing`；未以样例替代真实认证行情或模型验收。
 
 ## 当前结论
 
@@ -22,6 +22,8 @@
 v0.2 接口参考：先按 AGENTS.md 更新共享源码，再核对 AstrBot `4.29.1`、提交 `dffe922` 的 `Context.llm_generate`、`get_current_chat_provider_id` 与模型响应结构。测试替身不能代替真实宿主兼容验收。
 
 第 08～10 步查源码前检查共享仓库为干净状态并尝试两次 `pull --ff-only`（第二次 HTTP/1.1），均因 GitHub TLS 握手失败未更新。保留 `dffe922`，未重置共享仓库。按本地源码核对模型调用、主动消息及 ZIP 安装入口；不宣称本轮获取了上游最新代码。
+
+2026-10-20 接入审查时重新检查干净状态并成功拉取至 `fc6b326`。核对官方指南、helloworld、现有 Vikunja 和实际加载器后，补充 handler/生命周期说明、原生模型选择、简短描述和 README 参考来源，详见 [规范审查](ASTRBOT_COMPATIBILITY.md)。本地 ZIP 加载不要求 repo；没有远程仓库和许可信息时不声称已完成市场发布。
 
 ## 本次本地检查
 

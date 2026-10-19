@@ -2,13 +2,13 @@
 
 面向单人使用的 AstrBot 插件。首先支持美股，免费数据优先、接受延迟，提供持仓账本和按需 AI 决策辅助。
 
-当前 `v0.5.0` 是完成路线图第 01～10 步代码的首个安装测试版：持仓/关注、成交账本、个人引导、证据化 AI 研判、条件监控、收盘日报和按需多角色研究。不自动下单。真实 AstrBot、数据账户和平台仍需安装后验收，详见 [验证记录](docs/VALIDATION.md)。
+当前 `v0.5.1` 是第 01～10 步的安装测试修订版：持仓/关注、成交账本、个人引导、证据化 AI 研判、条件监控、收盘日报和按需多角色研究。不自动下单。真实 AstrBot、数据账户和平台仍需安装后验收，详见 [验证记录](docs/VALIDATION.md)。
 
 **首次安装请看 [安装与试用步骤](docs/INSTALL_TEST.md)**。开发目录的 `dist/` 提供 ZIP 和 SHA-256 校验文件；包内含源提交与逐文件哈希清单。ZIP 不含 AstrBot 本地软链接、虚拟环境、凭证或个人数据库。
 
 ## 安装
 
-目标环境：Python 3.12+、AstrBot `>=4.28.2,<5`，建议先用 `4.29.1` 或更新的兼容版本。接口核对依据本地 `4.29.1`（`dffe922`）；本轮拉取两次均因 TLS 网络故障失败，保留原源码，未把整个版本范围做运行验证。
+目标环境：Python 3.12+、AstrBot `>=4.28.2,<5`，建议先用 `4.29.1` 或更新的兼容版本。本次接入审查已成功更新并核对本地 master `fc6b326`（版本文件标为 `4.29.1`）；整个声明版本范围尚未做运行验证。
 
 1. 将本仓库置于 AstrBot 的 `data/plugins/astrbot_plugin_stockwatcher/`，或使用 AstrBot 支持的插件安装方式。
 2. 让 AstrBot 安装 `requirements.txt` 中的依赖；也可在其 Python 环境执行 `pip install -r requirements.txt`。
@@ -168,3 +168,9 @@ uv pip install --python .venv/bin/python --cache-dir /tmp/stockwatcher-uv-cache 
 测试使用 HTTP MockTransport 和 AstrBot API 测试替身，不调用外部行情、不发送真实平台消息。真实环境验收步骤见 [验证记录](docs/VALIDATION.md)。
 
 [实施路线图](docs/ROADMAP.md) · [架构](docs/PLAN.md) · [AI 设计](docs/DECISION_SUPPORT.md) · [数据调研](docs/RESEARCH.md)
+
+## 参考来源
+
+插件接入方式对照 [AstrBot 官方模板](https://github.com/Soulter/helloworld) 和 [开发指南](https://docs.astrbot.app/dev/star/plugin-new.html)；多角色研究思路参考 [astrbot_plugin_fund_analyzer](https://github.com/2529huang/astrbot_plugin_fund_analyzer)，具体取舍见 [调研记录](docs/RESEARCH.md)。本地开发还对照已使用的 Vikunja 插件的入口、生命周期与主动消息接口。
+
+当前通过本地 ZIP 交付，尚未绑定远程仓库或发布插件市场；`repo` 和开源许可需在公开发布前确定，不把私人测试包称为已完成市场发布。规范核对见 [AstrBot 接入审查](docs/ASTRBOT_COMPATIBILITY.md)。
