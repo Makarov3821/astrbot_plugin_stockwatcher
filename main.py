@@ -1,4 +1,4 @@
-"""AstrBot entry point through step 07; no autonomous polling or order execution."""
+"""AstrBot personal stock assistant; order execution is never performed."""
 
 from __future__ import annotations
 
@@ -13,11 +13,13 @@ from astrbot.api.star import Context, Star, StarTools
 from .stockwatcher.analysis import AnalysisService
 from .stockwatcher.commands import Commands
 from .stockwatcher.config import Settings
+from .stockwatcher.delivery import Delivery, message_parts
 from .stockwatcher.domain import ValidationError
 from .stockwatcher.evidence import EvidenceStore
 from .stockwatcher.ledger import Ledger
 from .stockwatcher.market import MarketService
 from .stockwatcher.model import AstrBotModel
+from .stockwatcher.monitor import Monitor
 from .stockwatcher.profiles import Profiles
 from .stockwatcher.provider import AlpacaProvider, MarketError
 from .stockwatcher.research_commands import ResearchCommands
@@ -37,6 +39,8 @@ class StockWatcherPlugin(Star):
         self.commands: Commands | None = None
         self.public_sources: PublicSources | None = None
         self.research: ResearchCommands | None = None
+        self.monitor: Monitor | None = None
+        self._worker: asyncio.Task | None = None
 
     async def initialize(self) -> None:
         async with self._init_lock:
@@ -75,7 +79,14 @@ class StockWatcherPlugin(Star):
                     self.store, profiles, ledger, market, evidence, sources, model
                 )
                 self.research = ResearchCommands(self.store, profiles, evidence, sources, analysis)
+                self.monitor = Monitor(
+                    analysis,
+                    Delivery(self.store, self._send, timezone=self.settings.display_timezone),
+                    self.settings,
+                )
+                self.research.monitor = self.monitor
                 self.commands = Commands(self.store, ledger, market, self.settings, self.research)
+                self._worker = asyncio.create_task(self.monitor.run(), name="stockwatcher-monitor")
             except BaseException:
                 if self.public_sources is not None:
                     await self.public_sources.close()
@@ -88,9 +99,14 @@ class StockWatcherPlugin(Star):
     async def _dispatch(self, text: str, origin: str, request_key: str | None) -> str:
         assert self.commands is not None and self.research is not None
         result = await self.commands.handle(text, origin=origin, request_key=request_key)
+        if self.monitor is not None:
+            await asyncio.to_thread(self.monitor.reconcile)
         if not any(word in text.split() for word in ("开始", "回答", "引导")):
             result += await self.research.nudge()
         return result
+
+    async def _send(self, origin: str, text: str):
+        return await self.context.send_message(origin, MessageChain().message(text))
 
     async def _push_test(self, current_origin: str) -> str:
         assert self.store is not None
@@ -141,7 +157,8 @@ class StockWatcherPlugin(Star):
                 response = await task
             finally:
                 self._tasks.discard(task)
-            yield event.plain_result(response)
+            for part in message_parts(response):
+                yield event.plain_result(part)
         except (ValidationError, MarketError) as exc:
             yield event.plain_result(str(exc))
         except Exception as exc:
@@ -154,6 +171,8 @@ class StockWatcherPlugin(Star):
         self._closing = True
         async with self._init_lock:
             tasks = list(self._tasks)
+            if self._worker is not None:
+                tasks.append(self._worker)
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)

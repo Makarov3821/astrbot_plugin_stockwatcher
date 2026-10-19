@@ -17,7 +17,12 @@ from .ledger import Ledger
 from .market import MarketService
 from .storage import SCHEMA_VERSION, Store
 
-HELP = """StockWatcher v0.2：个人设置、证据与 AI 研判
+HELP = """StockWatcher v0.3：个人设置、证据与 AI 研判
+/盯盘 监控 [开启|关闭|状态|巡检]
+/盯盘 监控 设置 免扰开始=22:00 免扰结束=07:00 自动采用=否
+/盯盘 日报 开启/关闭/AI开启/AI关闭
+/盯盘 计划 [采用 报告ID|取消 计划ID]
+/盯盘 通知 [重试 通知ID]
 /盯盘 开始 [MU] | 回答 ... | 引导 继续/暂停/返回/取消/确认
 /盯盘 设置 [MU] [周期=180 目标=... 目标期限=YYYY-MM-DD ...]
 /盯盘 大盘预期 偏多 期限=YYYY-MM-DD [基准=SPY 理由=...]
@@ -45,7 +50,7 @@ HELP = """StockWatcher v0.2：个人设置、证据与 AI 研判
 
 金额为 USD；碎股最多 8 位小数。日期按纽约交易日，同日按登记顺序。
 已有仓位用期初持仓登记，不扣现金；现金未知时不校验购买力。
-AI 复用 AstrBot 模型，目标候选不会自动覆盖个人目标。本版尚无自动日报或持续盯盘。"""
+AI 复用 AstrBot 模型，目标候选不会自动覆盖个人目标。监控和日报默认关闭，需明确开启。"""
 
 
 class Commands:
@@ -70,7 +75,11 @@ class Commands:
                 if self.research
                 else "AI：当前实例未配置研判服务。"
             )
-            + "\n自动盯盘与日报尚未实现。"
+            + (
+                "\n监控：" + json.dumps(self.research.monitor.config(), ensure_ascii=False)
+                if self.research and self.research.monitor
+                else "\n当前入口未配置监控服务。"
+            )
         )
 
     def holdings(self) -> str:
@@ -199,7 +208,7 @@ class Commands:
                 if not origin:
                     raise ValidationError("当前入口没有可保存的会话地址。")
                 self.store.set_setting("notification_origin", origin)
-                return "已保存当前会话为提醒目标；本版尚未启动自动盯盘。"
+                return "已保存当前会话为提醒目标；监控开关可用 /盯盘 监控 查看。"
             if tokens[1] == "清除":
                 self.store.set_setting("notification_origin", None)
                 return "已清除提醒目标。"

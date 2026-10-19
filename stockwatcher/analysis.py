@@ -287,6 +287,7 @@ class AnalysisService:
         cached: bool = False,
         request_key: str | None = None,
         now: datetime | None = None,
+        program_only: bool = False,
     ) -> dict:
         frozen_clock = now is not None
         symbol, now = instrument(symbol), now or datetime.now(UTC)
@@ -354,7 +355,7 @@ class AnalysisService:
             if not fresh:
                 gaps.append("原始行情尚未核实为最近完整交易日")
             source_report = None
-            if self.sources is not None and not cached:
+            if self.sources is not None and not cached and not program_only:
                 source_report = await self.sources.sync(
                     symbol, ir_url=profile["values"]["ir_url"], now=now
                 )
@@ -464,7 +465,10 @@ class AnalysisService:
                 "",
                 {"prompt_version": PROMPT_VERSION},
             )
-            if self.model is not None:
+            if program_only:
+                status = "observed"
+                result["summary"] = "程序巡检观察；本次未调用 AI。"
+            elif self.model is not None:
                 try:
                     reply = await self.model.generate(
                         SYSTEM, json.dumps(model_packet, ensure_ascii=False), origin

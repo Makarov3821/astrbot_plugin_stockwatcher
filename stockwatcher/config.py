@@ -23,6 +23,8 @@ class Settings:
     model_provider_id: str = ""
     model_timeout_seconds: int = 90
     investment_defaults: dict = field(default_factory=dict)
+    monitor_poll_seconds: int = 300
+    monitor_max_symbols: int = 5
 
     def __post_init__(self):
         if self.account_mode not in {"paper", "live"}:
@@ -33,6 +35,8 @@ class Settings:
             raise ValidationError("免费 SIP 查询至少预留 16 分钟延迟缓冲。")
         if not 5 <= self.model_timeout_seconds <= 300:
             raise ValidationError("模型超时应为 5～300 秒。")
+        if not 60 <= self.monitor_poll_seconds <= 3600 or not 1 <= self.monitor_max_symbols <= 20:
+            raise ValidationError("巡检间隔应为 60～3600 秒；每轮标的上限为 1～20。")
         if not isinstance(self.investment_defaults, dict):
             raise ValidationError("个人默认配置应为一个对象。")
         if not isinstance(self.ir_allowed_hosts, (tuple, list)) or any(
@@ -76,6 +80,8 @@ class Settings:
                 ir_allowed_hosts=tuple(config.get("ir_allowed_hosts", ["investors.micron.com"])),
                 model_provider_id=str(config.get("model_provider_id", "")),
                 model_timeout_seconds=int(config.get("model_timeout_seconds", 90)),
+                monitor_poll_seconds=int(config.get("monitor_poll_seconds", 300)),
+                monitor_max_symbols=int(config.get("monitor_max_symbols", 5)),
                 investment_defaults={
                     key: value
                     for key, value in config.get("investment_defaults", {}).items()

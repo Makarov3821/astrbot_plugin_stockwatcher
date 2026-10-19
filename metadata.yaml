@@ -1,6 +1,6 @@
 name: astrbot_plugin_stockwatcher
 display_name: StockWatcher 私人盯盘助理
 desc: 单人美股助理：个人策略、持仓账本、延迟行情与公告新闻证据、指标风控及 AI 决策报告。自动监控将在后续加入。
-version: v0.2.0
+version: v0.3.0
 author: Makarov3821
 astrbot_version: ">=4.28.2,<5"

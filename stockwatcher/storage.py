@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .domain import MarketBatch, ValidationError
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 SCHEMA = (
     "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
     """CREATE TABLE ledger_events (
@@ -52,6 +52,23 @@ RESEARCH_SCHEMA = (
         status TEXT NOT NULL DEFAULT 'pending', decided_at TEXT)""",
 )
 
+MONITOR_SCHEMA = (
+    """CREATE TABLE monitor_plans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, analysis_id INTEGER NOT NULL UNIQUE,
+        instrument TEXT NOT NULL, profile_revision INTEGER NOT NULL, ledger_signature TEXT NOT NULL,
+        state TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+        armed_at TEXT, last_asof TEXT, reason TEXT NOT NULL, payload TEXT NOT NULL)""",
+    """CREATE TABLE monitor_jobs (
+        job_key TEXT PRIMARY KEY, status TEXT NOT NULL, lease_until TEXT NOT NULL,
+        attempts INTEGER NOT NULL, next_at TEXT NOT NULL, result TEXT, error TEXT, owner TEXT NOT NULL)""",
+    """CREATE TABLE notification_outbox (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, event_key TEXT NOT NULL UNIQUE,
+        origin TEXT NOT NULL, payload TEXT NOT NULL, next_part INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
+        next_at TEXT NOT NULL, lease_until TEXT, created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL, last_error TEXT, guard_json TEXT)""",
+)
+
 
 class Store:
     def __init__(self, path: Path | str):
@@ -74,6 +91,10 @@ class Store:
                     version = 1
                 if version == 1:
                     for statement in RESEARCH_SCHEMA:
+                        db.execute(statement)
+                    version = 2
+                if version == 2:
+                    for statement in MONITOR_SCHEMA:
                         db.execute(statement)
                 db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         except BaseException:

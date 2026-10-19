@@ -30,6 +30,7 @@ class ResearchCommands:
             sources,
             analysis,
         )
+        self.monitor = None
 
     async def nudge(self) -> str:
         def once():
@@ -51,6 +52,8 @@ class ResearchCommands:
         self, tokens: list[str], *, origin: str, request_key: str | None
     ) -> str | None:
         command = tokens[0]
+        if self.monitor is not None and command in {"监控", "日报", "计划", "通知"}:
+            return await self._monitor_command(tokens)
         if command == "开始" and len(tokens) in {1, 2}:
             return await asyncio.to_thread(
                 self.profiles.wizard, "开始", symbol=tokens[1] if len(tokens) == 2 else None
@@ -155,6 +158,14 @@ class ResearchCommands:
                 cached=len(tokens) == 3,
                 request_key=f"analysis:{request_key}" if request_key else None,
             )
+            if (
+                self.monitor is not None
+                and self.monitor.config()["auto_adopt"]
+                and report["result"].get("entry")
+                and report["status"] == "validated"
+                and report["input"]["market_fresh"]
+            ):
+                await asyncio.to_thread(self.monitor.adopt, report["id"])
             return await asyncio.to_thread(self.analysis.render, report)
         if command == "分析记录" and len(tokens) == 2:
             rows = await asyncio.to_thread(
@@ -185,3 +196,88 @@ class ResearchCommands:
                 )
             raise ValidationError("用法：目标 [采用|拒绝 候选ID]。")
         return None
+
+    async def _monitor_command(self, tokens):
+        command = tokens[0]
+        if command == "监控":
+            if len(tokens) == 1 or tokens[1:] == ["状态"]:
+                return json.dumps(
+                    await asyncio.to_thread(self.monitor.status), ensure_ascii=False, indent=2
+                )
+            if len(tokens) == 2 and tokens[1] in {"开启", "关闭"}:
+                result = await asyncio.to_thread(
+                    self.monitor.configure, {"enabled": tokens[1] == "开启"}
+                )
+                return (
+                    "监控设置已保存：" + json.dumps(result, ensure_ascii=False) + "；不自动下单。"
+                )
+            if tokens[1:] == ["巡检"]:
+                return json.dumps(await self.monitor.tick(), ensure_ascii=False)
+            if len(tokens) >= 3 and tokens[1] == "设置":
+                options = parse_options(tokens[2:], {"免扰开始", "免扰结束", "自动采用"})
+                patch = {}
+                for key, value in options.items():
+                    if key == "自动采用":
+                        if value not in {"是", "否"}:
+                            raise ValidationError(
+                                "自动采用使用 是/否，只作用于后续新生成的受支持回调候选。"
+                            )
+                        patch["auto_adopt"] = value == "是"
+                    else:
+                        patch[{"免扰开始": "quiet_start", "免扰结束": "quiet_end"}[key]] = value
+                return json.dumps(
+                    await asyncio.to_thread(self.monitor.configure, patch), ensure_ascii=False
+                )
+        if command == "日报" and len(tokens) == 2:
+            patches = {
+                "开启": {"daily": True},
+                "关闭": {"daily": False},
+                "AI开启": {"daily_ai": True},
+                "AI关闭": {"daily_ai": False},
+            }
+            if tokens[1] in patches:
+                return "日报设置已保存（仍需监控开启及接收会话）：" + json.dumps(
+                    await asyncio.to_thread(self.monitor.configure, patches[tokens[1]]),
+                    ensure_ascii=False,
+                )
+        if command == "计划":
+            if len(tokens) == 1:
+                return json.dumps(
+                    (await asyncio.to_thread(self.monitor.status))["plans"],
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            if len(tokens) == 3 and tokens[1] in {"采用", "取消"}:
+                try:
+                    number = int(tokens[2])
+                except ValueError as exc:
+                    raise ValidationError("计划/报告 ID 应为整数。") from exc
+                if tokens[1] == "采用":
+                    number = await asyncio.to_thread(self.monitor.adopt, number)
+                    return (
+                        f"已保存监控计划 #{number}，等待候选区与完整日线确认；未开启监控时只保存。"
+                    )
+                return (
+                    "已取消计划。"
+                    if await asyncio.to_thread(self.monitor.cancel, number)
+                    else "计划不存在或已结束。"
+                )
+        if command == "通知":
+            if len(tokens) == 1:
+                return json.dumps(
+                    (await asyncio.to_thread(self.monitor.status))["notifications"],
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            if len(tokens) == 3 and tokens[1] == "重试":
+                try:
+                    number = int(tokens[2])
+                except ValueError as exc:
+                    raise ValidationError("通知 ID 应为整数。") from exc
+                from datetime import UTC, datetime
+
+                await asyncio.to_thread(self.monitor.delivery.retry, number, datetime.now(UTC))
+                return "失败通知已排队，遵守监控开关、有效期及免打扰设置。"
+        raise ValidationError(
+            "用法：监控 [开启|关闭|状态|巡检|设置 ...]；日报 开启/关闭/AI开启/AI关闭；计划 [采用 报告ID|取消 计划ID]；通知 [重试 ID]。"
+        )

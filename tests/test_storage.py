@@ -65,7 +65,9 @@ def test_v1_migration_preserves_ledger_and_settings(tmp_path):
     db.close()
     store = Store(path)
     try:
-        assert store.rows("PRAGMA user_version")[0][0] == 2
+        from stockwatcher.storage import SCHEMA_VERSION
+
+        assert store.rows("PRAGMA user_version")[0][0] == SCHEMA_VERSION
         assert store.get_setting("notification_origin") == "original"
         assert Ledger(store).view().positions["US:MU"].quantity == 2
         assert store.rows("SELECT * FROM analysis_runs") == []

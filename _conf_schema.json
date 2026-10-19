@@ -149,5 +149,17 @@
         "hint": "按展示时区解释；本版只保存偏好，尚不自动推送。"
       }
     }
+  },
+  "monitor_poll_seconds": {
+    "description": "监控巡检间隔（秒）",
+    "type": "int",
+    "default": 300,
+    "hint": "60～3600 秒；监控默认关闭，普通巡检不调用 AI。"
+  },
+  "monitor_max_symbols": {
+    "description": "每轮监控及日报标的上限",
+    "type": "int",
+    "default": 5,
+    "hint": "持仓优先，最多20只；超额在状态和覆盖提醒中列出。"
   }
 }
