@@ -19,6 +19,7 @@ ROOT_FILES = (
     "pyproject.toml",
     "README.md",
     "CHANGELOG.md",
+    "LICENSE",
 )
 
 

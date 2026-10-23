@@ -17,7 +17,7 @@
 | 日志/模型/发送 | 使用 `astrbot.api.logger`、Context 的模型 API 与 send_message，接入方式与现有 Vikunja 插件一致；没有为相似外观引入无关的 Web API 或权限体系 |
 | 打包 | 白名单 ZIP、逐文件及整包哈希，无本地源码软链接、虚拟环境、私有配置或数据库；大小远低于官方市场说明的 16MB 上限 |
 | README 参考说明 | 已补官方接入资料和多角色研究灵感项目链接，符合官方关于注明参考来源的要求 |
-| 市场发布信息 | 后续已按用户提供的地址补齐 `repo: https://github.com/Makarov3821/astrbot_plugin_stockwatcher`；实际本地加载器必填字段为 name、desc、version、author。许可选择与市场发布流程仍待完成 |
+| 市场发布信息 | 后续已按用户提供的地址补齐 `repo: https://github.com/Makarov3821/astrbot_plugin_stockwatcher`，并采用 GPL-3.0-only；实际本地加载器必填字段为 name、desc、version、author。市场发布流程仍待完成 |
 
 `short_desc`、logo 和 support_platforms 在文档中为可选字段。已添加简短描述；不会为凑齐模板而宣称所有平台均完成测试。特别是 Context.send_message 文档仍提示 QQ 官方平台的限制，是否能稳定主动推送应以你的平台实测为准，不能只凭 Vikunja 声明了某个平台就照抄保证。
 

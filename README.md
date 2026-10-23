@@ -173,4 +173,8 @@ uv pip install --python .venv/bin/python --cache-dir /tmp/stockwatcher-uv-cache 
 
 插件接入方式对照 [AstrBot 官方模板](https://github.com/Soulter/helloworld) 和 [开发指南](https://docs.astrbot.app/dev/star/plugin-new.html)；多角色研究思路参考 [astrbot_plugin_fund_analyzer](https://github.com/2529huang/astrbot_plugin_fund_analyzer)，具体取舍见 [调研记录](docs/RESEARCH.md)。本地开发还对照已使用的 Vikunja 插件的入口、生命周期与主动消息接口。
 
-代码仓库为 [Makarov3821/astrbot_plugin_stockwatcher](https://github.com/Makarov3821/astrbot_plugin_stockwatcher)，支持仓库安装和本地 ZIP 测试；尚未发布插件市场，开源许可仍待确定。规范核对见 [AstrBot 接入审查](docs/ASTRBOT_COMPATIBILITY.md)。
+代码仓库为 [Makarov3821/astrbot_plugin_stockwatcher](https://github.com/Makarov3821/astrbot_plugin_stockwatcher)，支持仓库安装和本地 ZIP 测试；尚未发布插件市场。规范核对见 [AstrBot 接入审查](docs/ASTRBOT_COMPATIBILITY.md)。
+
+## 许可证
+
+本项目采用 GNU General Public License v3.0（仅第 3 版，SPDX：`GPL-3.0-only`）。完整条款见 [LICENSE](LICENSE)。安装 ZIP 同样包含该许可证。

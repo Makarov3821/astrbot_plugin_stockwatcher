@@ -86,6 +86,7 @@ def test_release_allowlist_hashes_and_extracted_core_are_self_contained(tmp_path
         )
         assert not any(name.endswith((".sqlite3", ".env")) for name in names)
         prefix = "astrbot_plugin_stockwatcher/"
+        assert package.read(prefix + "LICENSE") == (root / "LICENSE").read_bytes()
         manifest = json.loads(package.read(prefix + "RELEASE_MANIFEST.json"))
         for name, digest in manifest["files"].items():
             assert hashlib.sha256(package.read(prefix + name)).hexdigest() == digest
