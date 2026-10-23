@@ -167,7 +167,7 @@ def test_private_assistant_installation_story(plugin_module):
                 )
             )
             report_text = await command("盯盘 分析 MU")
-            assert "[validated]" in report_text
+            assert "AI分析已通过校验" in report_text
             assert (
                 plugin.research.analysis.latest("MU")["result"]["target_proposal"]["price"]
                 == "250.00"
@@ -181,7 +181,9 @@ def test_private_assistant_installation_story(plugin_module):
                 == "220"
             )
             deep = await command("盯盘 深度 MU")
-            assert "深度研究" in deep and "bull" in deep and "bear" in deep
+            assert "多角色研究" in deep and "完成 5/5 个角色" in deep
+            detail = await command("盯盘 报告 2 详情")
+            assert "bull" in detail and "bear" in detail
             calls = plugin.research.analysis.model.stats()["calls"]
             assert calls == 7
             await command("盯盘 提醒目标 当前")

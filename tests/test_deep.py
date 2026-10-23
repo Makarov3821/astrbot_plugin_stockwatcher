@@ -79,7 +79,8 @@ def test_six_call_research_shared_packet_preserves_disagreement_and_horizons(sto
     assert research["roles"]["bear"]["stance"] == "oppose"
     assert research["roles"]["bull"]["horizon_days"] != research["roles"]["bear"]["horizon_days"]
     assert budget.stats()["calls"] == 6
-    assert "bear" in analysis.render(report)
+    assert "完成 5/5 个角色" in analysis.render(report)
+    assert "bear" in analysis.render(report, detailed=True)
     assert all(kwargs["max_output_tokens"] <= 2048 for _, kwargs in model.calls)
 
 

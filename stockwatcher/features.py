@@ -64,6 +64,17 @@ def metrics(adjusted: MarketBatch, raw: MarketBatch, benchmark: MarketBatch | No
             "high20": None,
             "two_positive_closes": len(closes) >= 3 and closes[-1] > closes[-2] > closes[-3],
         }
+        year = bars[-1].timestamp.astimezone(NEW_YORK).year
+        this_year = [bar for bar in bars if bar.timestamp.astimezone(NEW_YORK).year == year]
+        prior = [bar for bar in bars if bar.timestamp.astimezone(NEW_YORK).year < year]
+        result.update(
+            year=year,
+            year_start_close=str(prior[-1].close * factor) if prior else None,
+            year_return_pct=_pct(closes[-1], prior[-1].close) if prior else None,
+            year_high=str(max(bar.high for bar in this_year) * factor),
+            year_low=str(min(bar.low for bar in this_year) * factor),
+            year_range_complete=bool(prior),
+        )
         for window in (20, 60):
             if len(closes) >= window:
                 result[f"ma{window}"] = str(sum(closes[-window:]) / window * factor)

@@ -148,7 +148,8 @@ class EvidenceStore:
             """SELECT * FROM evidence_versions e WHERE instrument=? AND observed_at<=?
             AND version=(SELECT MAX(version) FROM evidence_versions other
                 WHERE other.evidence_id=e.evidence_id AND other.observed_at<=?)
-            ORDER BY observed_at DESC,evidence_id LIMIT ?""",
+            ORDER BY CASE WHEN json_extract(payload,'$.kind') IN ('financial_fact','filing') THEN 0 ELSE 1 END,
+                julianday(published_at) DESC,observed_at DESC,evidence_id LIMIT ?""",
             (instrument(symbol), observation_stamp(at), observation_stamp(at), limit),
         )
         usable, excluded = [], []

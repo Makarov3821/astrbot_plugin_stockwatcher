@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import shlex
 import uuid
@@ -58,6 +59,32 @@ class ResearchCommands:
             analysis,
         )
         self.monitor = None
+
+    @staticmethod
+    def report_key(origin):
+        return "last_chat_report:" + hashlib.sha256(origin.encode()).hexdigest()
+
+    async def analyze(
+        self, symbol, *, origin, request_key=None, cached=False, deep=False, question=None
+    ):
+        report = await self.analysis.analyze(
+            symbol,
+            origin=origin,
+            cached=cached,
+            request_key=f"analysis:{request_key}" if request_key else None,
+            deep=deep,
+            question=question,
+        )
+        if (
+            self.monitor is not None
+            and self.monitor.config()["auto_adopt"]
+            and report["result"].get("entry")
+            and report["status"] == "validated"
+            and report["input"]["market_fresh"]
+        ):
+            await asyncio.to_thread(self.monitor.adopt, report["id"])
+        await asyncio.to_thread(self.store.set_setting, self.report_key(origin), report["id"])
+        return await asyncio.to_thread(self.analysis.render, report)
 
     async def nudge(self) -> str:
         def once():
@@ -200,22 +227,13 @@ class ResearchCommands:
         if command in {"分析", "深度"} and 2 <= len(tokens) <= 3:
             if len(tokens) == 3 and tokens[2] != "缓存":
                 raise ValidationError("第三个参数仅支持 缓存；默认联网查询并刷新证据。")
-            report = await self.analysis.analyze(
+            return await self.analyze(
                 tokens[1],
                 origin=origin,
                 cached=len(tokens) == 3,
-                request_key=f"analysis:{request_key}" if request_key else None,
+                request_key=request_key,
                 deep=command == "深度",
             )
-            if (
-                self.monitor is not None
-                and self.monitor.config()["auto_adopt"]
-                and report["result"].get("entry")
-                and report["status"] == "validated"
-                and report["input"]["market_fresh"]
-            ):
-                await asyncio.to_thread(self.monitor.adopt, report["id"])
-            return await asyncio.to_thread(self.analysis.render, report)
         if command == "分析记录" and len(tokens) == 2:
             rows = await asyncio.to_thread(
                 self.store.rows,
@@ -223,12 +241,14 @@ class ResearchCommands:
                 (instrument(tokens[1]),),
             )
             return json.dumps([dict(row) for row in rows], ensure_ascii=False, indent=2)
-        if command == "报告" and len(tokens) == 2:
+        if command == "报告" and len(tokens) in {2, 3}:
+            if len(tokens) == 3 and tokens[2] != "详情":
+                raise ValidationError("用法：报告 ID [详情]；默认显示简报。")
             try:
                 report = await asyncio.to_thread(self.analysis.load, int(tokens[1]))
             except ValueError as exc:
                 raise ValidationError("报告 ID 应为整数。") from exc
-            return await asyncio.to_thread(self.analysis.render, report)
+            return await asyncio.to_thread(self.analysis.render, report, detailed=len(tokens) == 3)
         if command == "目标":
             if len(tokens) == 1:
                 rows = await asyncio.to_thread(
