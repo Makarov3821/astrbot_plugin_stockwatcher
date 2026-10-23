@@ -698,14 +698,9 @@ class AnalysisService:
             lines.append("AI 事件判断：" + json.dumps(result["event_risk"], ensure_ascii=False))
         research = report["model"].get("research")
         if research:
-            lines.append("深度研究：角色意见共用证据，分歧不等于概率。")
-            for role, data in research["roles"].items():
-                lines.append(
-                    f"{role} / {data['horizon_days']}天 / {data['stance']}："
-                    + data["arguments"][0]["text"]
-                )
-            for role, reason in research["errors"].items():
-                lines.append(f"角色缺失 {role}：{reason}")
+            from .reporting import research_lines
+
+            lines.extend(research_lines(research, detailed=True))
         if result.get("target_proposal"):
             proposals = self.store.rows(
                 "SELECT id,status FROM target_proposals WHERE analysis_id=?", (report["id"],)

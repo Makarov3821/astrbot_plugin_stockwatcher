@@ -10,7 +10,8 @@ from research_helpers import NOW, FakeMarket, reply_data
 from stockwatcher.analysis import AnalysisService
 from stockwatcher.budget import BudgetedModel
 from stockwatcher.config import Settings
-from stockwatcher.deep import ROLES, DeepResearch
+from stockwatcher.deep import ROLES, DeepResearch, validate_role
+from stockwatcher.domain import ValidationError
 from stockwatcher.evidence import EvidenceStore
 from stockwatcher.model import ModelReply, ModelUnavailable
 from stockwatcher.profiles import Profiles
@@ -89,12 +90,20 @@ def test_partial_and_all_role_failures_are_explicit(store, ledger, failures):
     model = RoleModel(failures)
     analysis, _ = service(store, ledger, model)
     report = asyncio.run(analysis.analyze("MU", deep=True, now=NOW))
-    assert report["status"] == "validated"
     research = report["model"]["research"]
-    assert set(research["errors"]) == set(failures)
-    assert research["quality"] == ("single_fallback" if len(failures) == 5 else "partial")
-    assert any("缺失角色" in warning for warning in report["result"]["warnings"])
-    assert len(model.calls) == 6
+    if len(failures) == 5:
+        assert report["status"] == "degraded"
+        assert set(research["errors"]) == {*failures, "synthesis"}
+        assert research["quality"] == "failed"
+        assert len(model.calls) == 5
+        assert "未启动汇总" in research["errors"]["synthesis"]
+        assert "单模型备选" not in analysis.render(report)
+    else:
+        assert report["status"] == "validated"
+        assert set(research["errors"]) == set(failures)
+        assert research["quality"] == "partial"
+        assert any("缺失角色" in warning for warning in report["result"]["warnings"])
+        assert len(model.calls) == 6
 
 
 def test_unknown_role_citations_are_discarded(store, ledger):
@@ -173,3 +182,80 @@ def test_deep_timeout_cancels_all_role_tasks(store, ledger):
     assert model.active == 0
     assert not any(row[0] == "reserved" for row in store.rows("SELECT status FROM model_calls"))
     assert any("总超时" in item for item in report["result"]["warnings"])
+
+
+def test_two_successful_roles_are_exposed_as_partial_research_at_the_top(store, ledger):
+    model = RoleModel(failures=("fundamental", "event", "bear"))
+    analysis, budget = service(store, ledger, model)
+    report = asyncio.run(analysis.analyze("MU", deep=True, now=NOW))
+    brief = analysis.render(report)
+    assert "深度研究未完整完成（2/5）" in brief.splitlines()[0]
+    assert "AI分析已通过校验" not in brief
+    assert "技术面｜5天｜利弊并存" in brief
+    assert "多方｜180天｜偏支持" in brief
+    assert "保留疑点：需要复核事件覆盖" in brief
+    assert (
+        "缺失角色：基本面" in brief
+        and "事件（模型请求未完成）" in brief
+        and "空方（模型请求未完成）" in brief
+    )
+    assert "趋势参考：20日均价" not in brief
+    assert "所有角色共用本次材料" in brief
+    assert budget.stats()["calls"] == 6
+    before = budget.stats()["calls"]
+    detail = analysis.render(report, detailed=True)
+    assert "论点：独立证据结论 [metrics]" in detail
+    assert "反证/缺口：需要复核事件覆盖 [metrics]" in detail
+    assert "失败诊断 基本面（fundamental）" in detail
+    assert budget.stats()["calls"] == before
+
+
+@pytest.mark.parametrize("fence", ["json", "JSON", ""])
+def test_standard_json_fences_are_accepted_without_weakening_role_validation(fence):
+    data = {
+        "role": "technical",
+        "horizon_days": 5,
+        "stance": "mixed",
+        "arguments": [{"text": "价格仍弱", "evidence_ids": ["metrics"]}],
+        "uncertainties": [{"text": "后续价格未知", "evidence_ids": ["metrics"]}],
+    }
+    text = f"```{fence}\n{json.dumps(data)}\n```"
+    assert validate_role(text, "technical", {"metrics"}) == data
+    data["arguments"][0]["evidence_ids"] = ["ev_not_supplied"]
+    with pytest.raises(ValidationError, match="technical.arguments"):
+        validate_role(f"```{fence}\n{json.dumps(data)}\n```", "technical", {"metrics"})
+
+
+def test_duplicate_role_keys_and_extra_text_are_still_rejected():
+    text = '{"role":"technical","role":"bull"}'
+    with pytest.raises(ValidationError, match="JSON"):
+        validate_role(text, "technical", {"metrics"})
+    with pytest.raises(ValidationError, match="JSON"):
+        validate_role("Here is the result: ```json\n{}\n```", "technical", {"metrics"})
+
+
+def test_successful_roles_and_failed_synthesis_are_not_labelled_complete(store, ledger):
+    class FailingSummary(RoleModel):
+        async def generate(self, system, prompt, origin, **kwargs):
+            response = await super().generate(system, prompt, origin, **kwargs)
+            if "role" not in json.loads(prompt):
+                raise ModelUnavailable("汇总请求超时")
+            return response
+
+    analysis, _ = service(store, ledger, FailingSummary())
+    report = asyncio.run(analysis.analyze("MU", deep=True, now=NOW))
+    text = analysis.render(report)
+    assert "深度汇总未完成（角色完成5/5）" in text.splitlines()[0]
+    assert "五个角色已完成，汇总未完成" in text
+    assert "五个角色与汇总均已完成" not in text
+    assert "汇总失败：请求超时" in text
+    assert "多方｜180天" in text and "空方｜5天" in text
+
+
+def test_preflight_budget_failure_remains_identified_as_deep_research(store, ledger):
+    analysis, _ = service(store, ledger, RoleModel(), replace(Settings(), model_daily_calls=5))
+    report = asyncio.run(analysis.analyze("MU", deep=True, now=NOW))
+    text = analysis.render(report)
+    assert "深度研究" in text.splitlines()[0]
+    assert "0/5" in text and "调用预算不足" in text
+    assert "没有已完成的研究角色" in text

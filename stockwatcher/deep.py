@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 
 from .analysis import _ids, _string, validate_reply
 from .budget import compact_packet
@@ -24,12 +25,25 @@ ROLE_SYSTEM = """你是股票研究角色，只使用给定同一时点证据。
 "uncertainties":[{"text":"反证/信息缺口","evidence_ids":["metrics"]}]}
 两类论证各1～4条，每条最多450字，只引用输入证据 ID、metrics、portfolio、preference。
 不同观察期限可以产生不同观点，不将短期风险与长期逻辑混同。"""
+ROLE_SYSTEM += """\n优先回应packet.user_question提出的问题，按focus承担的角度论证，不要求每个角色复述同一组均线数字。
+基本面区分已核实的财务事实、外部叙事和缺失数据；技术面给走势证据与确认条件；事件角色区分已发生事件与未知日历；多方和空方各自给最强论点及其失效条件。证据不足可以用unknown，不为制造分歧而编结论。
+严格使用输入role代码。arguments和uncertainties每条都需至少一个合法引用：价格事实用metrics，账户事实用portfolio，偏好用preference，材料只能用packet.evidence.items中的完整ev_编号；不把标题或URL当作编号。"""
 
 
 def validate_role(text, role, known):
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate")
+            result[key] = value
+        return result
+
     try:
-        data = json.loads(text)
-    except ValueError as exc:
+        text = text.strip()
+        fenced = re.fullmatch(r"```(?:json)?\s*\n(.*?)\n```", text, flags=re.S | re.I)
+        data = json.loads(fenced[1] if fenced else text, object_pairs_hook=unique)
+    except (ValueError, AttributeError) as exc:
         raise ValidationError("角色未返回有效 JSON") from exc
     if (
         not isinstance(data, dict)
@@ -47,11 +61,16 @@ def validate_role(text, role, known):
     for key in ("arguments", "uncertainties"):
         if not isinstance(data[key], list) or not 1 <= len(data[key]) <= 4:
             raise ValidationError("角色需同时提供证据和反证")
-        for item in data[key]:
+        for index, item in enumerate(data[key]):
             if not isinstance(item, dict) or set(item) != {"text", "evidence_ids"}:
                 raise ValidationError("角色论证格式无效")
             _string(item["text"], 450)
-            _ids(item["evidence_ids"], known, nonempty=True)
+            _ids(
+                item["evidence_ids"],
+                known,
+                nonempty=True,
+                field=f"{role}.{key}[{index}].evidence_ids",
+            )
     return data
 
 
@@ -78,7 +97,7 @@ class DeepResearch:
                 "mode": "deep",
                 "research": {
                     "quality": quality,
-                    "version": "five-roles-v1",
+                    "version": "five-roles-v2",
                     "roles": results,
                     "errors": errors,
                     "role_metadata": metadata,
@@ -108,6 +127,8 @@ class DeepResearch:
         try:
             async with asyncio.timeout(self.settings.deep_timeout_seconds):
                 await asyncio.gather(*(role_call(role) for role in ROLES))
+                if not results:
+                    raise ModelUnavailable("五个研究角色均未完成，未启动汇总，也未形成深度结论。")
                 compact_roles = {
                     role: {
                         **data,
