@@ -54,7 +54,7 @@ def test_wizard_draft_pause_resume_confirm_and_skip(store):
     profiles.wizard("回答", {"账户": "现金"}, now=NOW)
     assert profiles.resolved("MU")["values"]["account_type"] == "unknown"
     profiles.wizard("暂停", now=NOW)
-    assert "默认模板" in Profiles(store).wizard("继续", now=NOW)
+    assert "日线趋势" in Profiles(store).wizard("继续", now=NOW)
     profiles.wizard("回答", {"control": "采用默认"}, now=NOW)
     for _ in range(3):  # risk, drawdown, outlook
         profiles.wizard("回答", {"control": "跳过"}, now=NOW)

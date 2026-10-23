@@ -98,7 +98,11 @@ class Event:
 
 
 def allowed_config(*origins):
-    return {"allowed_origins": list(origins or (Event.unified_msg_origin,))}
+    # Existing command/onboarding tests explicitly exercise non-exclusive mode.
+    return {
+        "allowed_origins": list(origins or (Event.unified_msg_origin,)),
+        "exclusive_chat": False,
+    }
 
 
 async def responses(plugin, text):
@@ -218,7 +222,7 @@ def test_preferences_stock_wizard_and_hint_flow_through_actual_entry(plugin_modu
             )
             assert "待确认" in (await responses(plugin, '盯盘 回答 理由="长期 期待"'))[0]
             assert "已生效" in (await responses(plugin, "盯盘 引导 确认"))[0]
-            assert '"target_price": "200"' in (await responses(plugin, "盯盘 设置 MU"))[0]
+            assert "个人目标价：200 美元" in (await responses(plugin, "盯盘 设置 MU"))[0]
             assert "候选" in (await responses(plugin, "盯盘 目标"))[0] or not plugin.store.rows(
                 "SELECT * FROM target_proposals"
             )

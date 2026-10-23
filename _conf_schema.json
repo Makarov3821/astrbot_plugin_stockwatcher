@@ -1,79 +1,75 @@
 {
-  "allowed_origins": {
-    "description": "消息入口白名单（至少添加一个私聊入口）",
-    "type": "list",
-    "default": [],
-    "obvious_hint": true,
-    "hint": "必填至少1项，可添加多个。请在私聊发送 /盯盘 入口，将返回的完整 UMO 逐项复制到这里（平台实例ID:FriendMessage:会话ID）。只支持私聊、精确匹配，不支持通配符。留空时所有业务和自动任务均不启用；保存后重载。"
+  "access": {
+    "description": "01 · 入口与聊天",
+    "type": "object",
+    "hint": "先授权自己的私聊入口；多个入口共享同一份个人记录。",
+    "items": {
+      "allowed_origins": {
+        "description": "消息入口白名单（至少添加一个私聊入口）",
+        "type": "list",
+        "default": [],
+        "obvious_hint": true,
+        "hint": "必填至少1项，可添加多个。请在私聊发送 /盯盘 入口，将返回的完整 UMO 逐项复制到这里（平台实例ID:FriendMessage:会话ID）。只支持私聊、精确匹配，不支持通配符。留空时所有业务和自动任务均不启用；保存后重载。"
+      },
+      "exclusive_chat": {
+        "description": "由盯盘助理接管授权私聊",
+        "type": "bool",
+        "default": true,
+        "hint": "开启后，白名单私聊中的普通消息由本插件理解并处理，不再交给宿主普通聊天模型。关闭后保留 /盯盘 指令和进行中的引导。"
+      }
+    }
   },
-  "alpaca_key_id": {
-    "description": "Alpaca API Key ID",
-    "type": "string",
-    "secret": true,
-    "default": "",
-    "hint": "可留空并使用 APCA_API_KEY_ID 环境变量；不要在聊天中发送凭证。"
-  },
-  "alpaca_secret_key": {
-    "description": "Alpaca Secret Key",
-    "type": "string",
-    "secret": true,
-    "default": "",
-    "hint": "可留空并使用 APCA_API_SECRET_KEY 环境变量；配置页遮罩不等于文件加密。"
-  },
-  "alpaca_account_mode": {
-    "description": "Alpaca 凭证所属账户",
-    "type": "string",
-    "options": [
-      "paper",
-      "live"
-    ],
-    "default": "paper",
-    "hint": "仅用于选择交易日历的只读接口，不会提交订单。"
-  },
-  "delay_minutes": {
-    "description": "免费 SIP 查询延迟（分钟）",
-    "type": "int",
-    "default": 16,
-    "hint": "至少 16 分钟，给免费历史查询保留缓冲；不代表承诺提醒恰好延迟 16 分钟。"
-  },
-  "request_timeout_seconds": {
-    "description": "单次行情请求超时（秒）",
-    "type": "int",
-    "default": 15
-  },
-  "display_timezone": {
-    "description": "展示时区",
-    "type": "string",
-    "default": "Asia/Shanghai"
-  },
-  "sec_user_agent": {
-    "description": "SEC 请求标识与联系邮箱",
-    "type": "string",
-    "default": "",
-    "hint": "例如 StockWatcher your-real-email@example.com；留空时公告接口保持未配置，不伪造联系信息。"
-  },
-  "ir_allowed_hosts": {
-    "description": "允许抓取的公司 IR 域名",
-    "type": "list",
-    "default": [
-      "investors.micron.com"
-    ],
-    "hint": "仅填写已确认的公司官网域名；不自动抓取新闻正文中的任意链接。"
-  },
-  "model_provider_id": {
-    "description": "AstrBot 模型提供商 ID",
-    "type": "string",
-    "_special": "select_provider",
-    "default": "",
-    "hint": "留空使用当前聊天配置的模型；不需要新增模型密钥。"
-  },
-  "model_timeout_seconds": {
-    "description": "AI 单次研判超时（秒）",
-    "type": "int",
-    "default": 90
+  "market_data": {
+    "description": "02 · 行情与公告来源",
+    "type": "object",
+    "hint": "Alpaca 用于读取美股行情，SEC 用于公司披露；不连接你的券商持仓，也不下单。",
+    "items": {
+      "alpaca_key_id": {
+        "description": "Alpaca API Key ID",
+        "type": "string",
+        "secret": true,
+        "default": "",
+        "hint": "可留空并使用 APCA_API_KEY_ID 环境变量；不要在聊天中发送凭证。"
+      },
+      "alpaca_secret_key": {
+        "description": "Alpaca Secret Key",
+        "type": "string",
+        "secret": true,
+        "default": "",
+        "hint": "可留空并使用 APCA_API_SECRET_KEY 环境变量；配置页遮罩不等于文件加密。"
+      },
+      "alpaca_account_mode": {
+        "description": "Alpaca 凭证所属账户",
+        "type": "string",
+        "options": [
+          "paper",
+          "live"
+        ],
+        "default": "paper",
+        "hint": "仅用于选择交易日历的只读接口，不会提交订单。",
+        "labels": [
+          "模拟账户凭证（真实市场行情）",
+          "实盘账户凭证"
+        ]
+      },
+      "sec_user_agent": {
+        "description": "SEC 请求标识与联系邮箱",
+        "type": "string",
+        "default": "",
+        "hint": "例如 StockWatcher your-real-email@example.com；留空时公告接口保持未配置，不伪造联系信息。"
+      },
+      "ir_allowed_hosts": {
+        "description": "允许抓取的公司 IR 域名",
+        "type": "list",
+        "default": [
+          "investors.micron.com"
+        ],
+        "hint": "仅填写已确认的公司官网域名；不自动抓取新闻正文中的任意链接。"
+      }
+    }
   },
   "investment_defaults": {
-    "description": "个人投资默认设置",
+    "description": "03 · 长期投资偏好",
     "type": "object",
     "items": {
       "account_type": {
@@ -84,7 +80,13 @@
           "unknown",
           "cash",
           "margin"
-        ]
+        ],
+        "labels": [
+          "尚未指定",
+          "现金账户",
+          "保证金账户"
+        ],
+        "hint": "你实际使用的投资账户类型；与上面的 Alpaca 数据账户模式是两回事。"
       },
       "strategy": {
         "description": "默认策略",
@@ -92,12 +94,17 @@
         "default": "trend_v1",
         "options": [
           "trend_v1"
-        ]
+        ],
+        "labels": [
+          "日线趋势观察"
+        ],
+        "hint": "目前只有日线趋势模板；结合均线、波动和回撤观察，不代表收益承诺。"
       },
       "horizon_days": {
         "description": "默认观察周期（天）",
         "type": "int",
-        "default": 60
+        "default": 60,
+        "hint": "分析时默认参考的投资时间尺度，例如 60 天；不是必须持有或卖出的日期。"
       },
       "allow_add": {
         "description": "已有持仓是否允许加仓",
@@ -107,28 +114,37 @@
           "unset",
           "true",
           "false"
-        ]
+        ],
+        "labels": [
+          "尚未决定",
+          "允许",
+          "禁止"
+        ],
+        "hint": "是否愿意增加已有持仓；允许仍需满足仓位和风险约束。"
       },
       "max_stock_pct": {
         "description": "单股仓位上限（百分数）",
         "type": "string",
         "default": "",
-        "hint": "留空表示未知，0 是禁止新增该风险。"
+        "hint": "单只股票占账户总资产的最高比例，填 20 表示 20%；留空表示未设置，0 是实际禁止。"
       },
       "max_total_pct": {
         "description": "总仓位上限（百分数）",
         "type": "string",
-        "default": ""
+        "default": "",
+        "hint": "全部股票市值占账户总资产的最高比例，填 60 表示 60%；留空表示未设置。"
       },
       "risk_budget_pct": {
         "description": "单次风险预算（账户百分数）",
         "type": "string",
-        "default": ""
+        "default": "",
+        "hint": "单次新增仓位从入场价跌到失效价时，计划损失最多占总资产多少；填 1 表示 1%，不是投入资金比例或亏损概率。"
       },
       "drawdown_pct": {
         "description": "回撤阈值（百分数）",
         "type": "string",
-        "default": ""
+        "default": "",
+        "hint": "相对下方基准回落多少百分比时提示处理；填 20 表示 20%。留空不设此规则，填写时必须选择基准。"
       },
       "drawdown_basis": {
         "description": "回撤参考基准",
@@ -139,7 +155,14 @@
           "cost",
           "holding_high",
           "rolling20_high"
-        ]
+        ],
+        "labels": [
+          "尚未选择",
+          "买入成本",
+          "本轮持仓期间高点",
+          "近 20 个交易日高点"
+        ],
+        "hint": "决定从哪个价格计算回落幅度；与回撤阈值配套。"
       },
       "drawdown_effect": {
         "description": "触及回撤阈值后的处理",
@@ -148,56 +171,315 @@
         "options": [
           "review",
           "exit"
-        ]
+        ],
+        "labels": [
+          "提醒重新评估",
+          "按退出条件提示"
+        ],
+        "hint": "触及阈值后如何生成观察或退出提示；两者都不会自动卖出。"
       },
       "notification_time": {
         "description": "日报时间偏好",
         "type": "string",
         "default": "07:30",
-        "hint": "按展示时区解释；另用 /盯盘 监控 开启 和 /盯盘 日报 开启 才订阅。"
+        "hint": "按“展示时区”发送日报，例如默认北京时间 07:30。还需在下一组开启监控和日报，并选择接收入口。"
+      }
+    },
+    "hint": "跨股票沿用的习惯与风险约束。大盘看法、关注股票和个股目标通过聊天记录。"
+  },
+  "notifications": {
+    "description": "04 · 提醒与日报",
+    "type": "object",
+    "hint": "先选接收入口，再开启监控；日报还需单独开启。日报时间在上一组。",
+    "items": {
+      "notification_origin": {
+        "description": "提醒接收入口",
+        "type": "string",
+        "default": "",
+        "hint": "复制白名单中的一个完整 UMO。留空不发送主动提醒；也可聊天说“把提醒发到这里”。"
+      },
+      "enabled": {
+        "description": "开启监控",
+        "type": "bool",
+        "default": false,
+        "hint": "后台检查持仓与已采用的回调计划；需要有效接收入口和行情凭证。普通巡检不调用 AI。"
+      },
+      "daily": {
+        "description": "开启收盘日报",
+        "type": "bool",
+        "default": false,
+        "hint": "监控开启后，按上方日报时间发送最近已收盘交易日的日报；并非每轮巡检都发送。"
+      },
+      "daily_ai": {
+        "description": "日报使用 AI",
+        "type": "bool",
+        "default": false,
+        "hint": "关闭时发送程序日报；开启后调用 AstrBot 模型生成日报，共享每日模型预算。"
+      },
+      "quiet_start": {
+        "description": "免打扰开始",
+        "type": "string",
+        "default": "22:00",
+        "hint": "按展示时区解释，免扰期间提醒排队；开始与结束相同表示不设免扰。"
+      },
+      "quiet_end": {
+        "description": "免打扰结束",
+        "type": "string",
+        "default": "07:00",
+        "hint": "按展示时区解释；跨午夜的 22:00 到 07:00 有效。"
+      },
+      "auto_adopt": {
+        "description": "自动保存新回调候选为提醒计划",
+        "type": "bool",
+        "default": false,
+        "hint": "开启后仅对后续校验通过的受支持候选保存提醒计划；不自动买入。默认由你明确采用。"
       }
     }
+  },
+  "ai": {
+    "description": "05 · AI 理解与研判",
+    "type": "object",
+    "hint": "复用 AstrBot 已配置的模型。复杂自然语言理解、个股研判、深度研究和 AI 日报共享预算；常见查询由程序直接回答。",
+    "items": {
+      "model_provider_id": {
+        "description": "AstrBot 模型提供商 ID",
+        "type": "string",
+        "_special": "select_provider",
+        "default": "",
+        "hint": "留空使用当前聊天配置的模型；不需要新增模型密钥。"
+      },
+      "model_timeout_seconds": {
+        "description": "AI 单次研判超时（秒）",
+        "type": "int",
+        "default": 90,
+        "hint": "每次模型请求最多等待多少秒，包括自然语言意图识别。"
+      },
+      "model_daily_calls": {
+        "description": "每日模型调用次数上限（0禁用）",
+        "type": "int",
+        "default": 24,
+        "hint": "自然语言识别与研判共用次数；0 禁用模型，常见查询与明确指令仍可使用。"
+      },
+      "model_daily_token_budget": {
+        "description": "每日估算 token 预留预算（非账单上限）",
+        "type": "int",
+        "default": 200000,
+        "hint": "每日按输入字节与输出额度保守预留的预算，不是提供商账单硬上限。"
+      },
+      "model_max_input_chars": {
+        "description": "单次模型输入字符上限",
+        "type": "int",
+        "default": 24000,
+        "hint": "限制每次送入模型的用户消息和分析材料长度。"
+      },
+      "model_max_output_tokens": {
+        "description": "请求模型单次输出 token 上限",
+        "type": "int",
+        "default": 2048,
+        "hint": "向模型请求的单次输出上限，实际计费以提供商为准。"
+      },
+      "deep_concurrency": {
+        "description": "深度角色并发上限",
+        "type": "int",
+        "default": 2,
+        "hint": "深度研究时同时运行的角色数量，影响请求压力。"
+      },
+      "deep_timeout_seconds": {
+        "description": "深度研究总超时（秒）",
+        "type": "int",
+        "default": 300,
+        "hint": "一轮多角色研究最多等待多少秒。"
+      }
+    }
+  },
+  "advanced": {
+    "description": "06 · 时区与采集频率",
+    "type": "object",
+    "hint": "一般保留默认。免费 SIP 行情有延迟，巡检变快不会让数据变成实时行情。",
+    "items": {
+      "display_timezone": {
+        "description": "展示时区",
+        "type": "string",
+        "default": "Asia/Shanghai",
+        "hint": "用于消息时间、免打扰和日报时间；默认 Asia/Shanghai（北京时间）。美股交易日始终按纽约时间处理。"
+      },
+      "delay_minutes": {
+        "description": "免费 SIP 查询延迟（分钟）",
+        "type": "int",
+        "default": 16,
+        "hint": "至少 16 分钟，给免费历史查询保留缓冲；不代表承诺提醒恰好延迟 16 分钟。"
+      },
+      "request_timeout_seconds": {
+        "description": "单次行情请求超时（秒）",
+        "type": "int",
+        "default": 15,
+        "hint": "行情单次 HTTP 请求等待时间，不包含 AI 请求。"
+      },
+      "monitor_poll_seconds": {
+        "description": "监控巡检间隔（秒）",
+        "type": "int",
+        "default": 300,
+        "hint": "60～3600 秒；监控默认关闭，普通巡检不调用 AI。"
+      },
+      "monitor_max_symbols": {
+        "description": "每轮监控及日报标的上限",
+        "type": "int",
+        "default": 5,
+        "hint": "持仓优先，最多20只；超额在状态和覆盖提醒中列出。"
+      }
+    }
+  },
+  "config_layout_version": {
+    "type": "int",
+    "default": 0,
+    "invisible": true,
+    "description": "配置布局迁移版本（内部）"
+  },
+  "allowed_origins": {
+    "description": "消息入口白名单（至少添加一个私聊入口）",
+    "type": "list",
+    "default": [],
+    "obvious_hint": true,
+    "hint": "必填至少1项，可添加多个。请在私聊发送 /盯盘 入口，将返回的完整 UMO 逐项复制到这里（平台实例ID:FriendMessage:会话ID）。只支持私聊、精确匹配，不支持通配符。留空时所有业务和自动任务均不启用；保存后重载。",
+    "invisible": true
+  },
+  "alpaca_key_id": {
+    "description": "Alpaca API Key ID",
+    "type": "string",
+    "secret": true,
+    "default": "",
+    "hint": "可留空并使用 APCA_API_KEY_ID 环境变量；不要在聊天中发送凭证。",
+    "invisible": true
+  },
+  "alpaca_secret_key": {
+    "description": "Alpaca Secret Key",
+    "type": "string",
+    "secret": true,
+    "default": "",
+    "hint": "可留空并使用 APCA_API_SECRET_KEY 环境变量；配置页遮罩不等于文件加密。",
+    "invisible": true
+  },
+  "alpaca_account_mode": {
+    "description": "Alpaca 凭证所属账户",
+    "type": "string",
+    "options": [
+      "paper",
+      "live"
+    ],
+    "default": "paper",
+    "hint": "仅用于选择交易日历的只读接口，不会提交订单。",
+    "labels": [
+      "模拟账户凭证（真实市场行情）",
+      "实盘账户凭证"
+    ],
+    "invisible": true
+  },
+  "sec_user_agent": {
+    "description": "SEC 请求标识与联系邮箱",
+    "type": "string",
+    "default": "",
+    "hint": "例如 StockWatcher your-real-email@example.com；留空时公告接口保持未配置，不伪造联系信息。",
+    "invisible": true
+  },
+  "ir_allowed_hosts": {
+    "description": "允许抓取的公司 IR 域名",
+    "type": "list",
+    "default": [
+      "investors.micron.com"
+    ],
+    "hint": "仅填写已确认的公司官网域名；不自动抓取新闻正文中的任意链接。",
+    "invisible": true
+  },
+  "model_provider_id": {
+    "description": "AstrBot 模型提供商 ID",
+    "type": "string",
+    "_special": "select_provider",
+    "default": "",
+    "hint": "留空使用当前聊天配置的模型；不需要新增模型密钥。",
+    "invisible": true
+  },
+  "model_timeout_seconds": {
+    "description": "AI 单次研判超时（秒）",
+    "type": "int",
+    "default": 90,
+    "hint": "每次模型请求最多等待多少秒，包括自然语言意图识别。",
+    "invisible": true
+  },
+  "model_daily_calls": {
+    "description": "每日模型调用次数上限（0禁用）",
+    "type": "int",
+    "default": 24,
+    "hint": "自然语言识别与研判共用次数；0 禁用模型，常见查询与明确指令仍可使用。",
+    "invisible": true
+  },
+  "model_daily_token_budget": {
+    "description": "每日估算 token 预留预算（非账单上限）",
+    "type": "int",
+    "default": 200000,
+    "hint": "每日按输入字节与输出额度保守预留的预算，不是提供商账单硬上限。",
+    "invisible": true
+  },
+  "model_max_input_chars": {
+    "description": "单次模型输入字符上限",
+    "type": "int",
+    "default": 24000,
+    "hint": "限制每次送入模型的用户消息和分析材料长度。",
+    "invisible": true
+  },
+  "model_max_output_tokens": {
+    "description": "请求模型单次输出 token 上限",
+    "type": "int",
+    "default": 2048,
+    "hint": "向模型请求的单次输出上限，实际计费以提供商为准。",
+    "invisible": true
+  },
+  "deep_concurrency": {
+    "description": "深度角色并发上限",
+    "type": "int",
+    "default": 2,
+    "hint": "深度研究时同时运行的角色数量，影响请求压力。",
+    "invisible": true
+  },
+  "deep_timeout_seconds": {
+    "description": "深度研究总超时（秒）",
+    "type": "int",
+    "default": 300,
+    "hint": "一轮多角色研究最多等待多少秒。",
+    "invisible": true
+  },
+  "display_timezone": {
+    "description": "展示时区",
+    "type": "string",
+    "default": "Asia/Shanghai",
+    "hint": "用于消息时间、免打扰和日报时间；默认 Asia/Shanghai（北京时间）。美股交易日始终按纽约时间处理。",
+    "invisible": true
+  },
+  "delay_minutes": {
+    "description": "免费 SIP 查询延迟（分钟）",
+    "type": "int",
+    "default": 16,
+    "hint": "至少 16 分钟，给免费历史查询保留缓冲；不代表承诺提醒恰好延迟 16 分钟。",
+    "invisible": true
+  },
+  "request_timeout_seconds": {
+    "description": "单次行情请求超时（秒）",
+    "type": "int",
+    "default": 15,
+    "hint": "行情单次 HTTP 请求等待时间，不包含 AI 请求。",
+    "invisible": true
   },
   "monitor_poll_seconds": {
     "description": "监控巡检间隔（秒）",
     "type": "int",
     "default": 300,
-    "hint": "60～3600 秒；监控默认关闭，普通巡检不调用 AI。"
+    "hint": "60～3600 秒；监控默认关闭，普通巡检不调用 AI。",
+    "invisible": true
   },
   "monitor_max_symbols": {
     "description": "每轮监控及日报标的上限",
     "type": "int",
     "default": 5,
-    "hint": "持仓优先，最多20只；超额在状态和覆盖提醒中列出。"
-  },
-  "model_daily_calls": {
-    "description": "每日模型调用次数上限（0禁用）",
-    "type": "int",
-    "default": 24
-  },
-  "model_daily_token_budget": {
-    "description": "每日估算 token 预留预算（非账单上限）",
-    "type": "int",
-    "default": 200000
-  },
-  "model_max_input_chars": {
-    "description": "单次模型输入字符上限",
-    "type": "int",
-    "default": 24000
-  },
-  "model_max_output_tokens": {
-    "description": "请求模型单次输出 token 上限",
-    "type": "int",
-    "default": 2048
-  },
-  "deep_concurrency": {
-    "description": "深度角色并发上限",
-    "type": "int",
-    "default": 2
-  },
-  "deep_timeout_seconds": {
-    "description": "深度研究总超时（秒）",
-    "type": "int",
-    "default": 300
+    "hint": "持仓优先，最多20只；超额在状态和覆盖提醒中列出。",
+    "invisible": true
   }
 }

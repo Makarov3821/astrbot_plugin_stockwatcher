@@ -299,12 +299,14 @@ def test_installation_schema_defaults_are_accepted_by_profile(store):
     from stockwatcher.profiles import Profiles
 
     schema = json.loads((Path(__file__).resolve().parents[1] / "_conf_schema.json").read_text())
-    config = {
-        key: value.get("default") for key, value in schema.items() if key != "investment_defaults"
-    }
-    config["investment_defaults"] = {
-        key: value["default"] for key, value in schema["investment_defaults"]["items"].items()
-    }
+
+    def defaults(nodes):
+        return {
+            key: defaults(node["items"]) if node["type"] == "object" else node.get("default")
+            for key, node in nodes.items()
+        }
+
+    config = defaults(schema)
     settings = Settings.from_mapping(config)
     profile = Profiles(store, settings.investment_defaults).resolved("MU")
     assert profile["values"]["allow_add"] is None

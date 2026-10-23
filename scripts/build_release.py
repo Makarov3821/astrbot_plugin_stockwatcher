@@ -31,7 +31,10 @@ def build(root: Path, output: Path) -> Path:
     example = json.loads((root / "configs/minimal.json").read_text())
     schema = json.loads((root / "_conf_schema.json").read_text())
     if any(
-        example.get(key) or schema[key].get("default")
+        example.get(key)
+        or example.get("market_data", {}).get(key)
+        or schema[key].get("default")
+        or schema["market_data"]["items"][key].get("default")
         for key in ("alpaca_key_id", "alpaca_secret_key")
     ):
         raise ValueError("Release example/schema must not contain credentials")

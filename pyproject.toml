@@ -1,6 +1,6 @@
 [project]
 name = "astrbot-plugin-stockwatcher"
-version = "0.6.1"
+version = "0.7.0"
 description = "Personal stock watcher for AstrBot"
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]

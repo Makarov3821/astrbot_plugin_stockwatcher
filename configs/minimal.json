@@ -1,18 +1,17 @@
 {
-  "allowed_origins": [],
-  "alpaca_key_id": "",
-  "alpaca_secret_key": "",
-  "alpaca_account_mode": "paper",
-  "sec_user_agent": "",
-  "model_provider_id": "",
-  "display_timezone": "Asia/Shanghai",
-  "monitor_poll_seconds": 300,
-  "monitor_max_symbols": 5,
-  "model_daily_calls": 24,
-  "model_daily_token_budget": 200000,
-  "model_max_output_tokens": 2048,
-  "deep_concurrency": 2,
-  "deep_timeout_seconds": 300,
+  "access": {
+    "allowed_origins": [],
+    "exclusive_chat": true
+  },
+  "market_data": {
+    "alpaca_key_id": "",
+    "alpaca_secret_key": "",
+    "alpaca_account_mode": "paper",
+    "sec_user_agent": "",
+    "ir_allowed_hosts": [
+      "investors.micron.com"
+    ]
+  },
   "investment_defaults": {
     "account_type": "unknown",
     "strategy": "trend_v1",
@@ -21,6 +20,35 @@
     "max_stock_pct": "",
     "max_total_pct": "",
     "risk_budget_pct": "",
+    "drawdown_pct": "",
+    "drawdown_basis": "unset",
+    "drawdown_effect": "review",
     "notification_time": "07:30"
+  },
+  "notifications": {
+    "notification_origin": "",
+    "enabled": false,
+    "daily": false,
+    "daily_ai": false,
+    "quiet_start": "22:00",
+    "quiet_end": "07:00",
+    "auto_adopt": false
+  },
+  "ai": {
+    "model_provider_id": "",
+    "model_timeout_seconds": 90,
+    "model_daily_calls": 24,
+    "model_daily_token_budget": 200000,
+    "model_max_input_chars": 24000,
+    "model_max_output_tokens": 2048,
+    "deep_concurrency": 2,
+    "deep_timeout_seconds": 300
+  },
+  "advanced": {
+    "display_timezone": "Asia/Shanghai",
+    "delay_minutes": 16,
+    "request_timeout_seconds": 15,
+    "monitor_poll_seconds": 300,
+    "monitor_max_symbols": 5
   }
 }

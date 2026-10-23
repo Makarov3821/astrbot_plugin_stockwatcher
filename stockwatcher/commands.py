@@ -80,7 +80,12 @@ class Commands:
                 else "AI：当前实例未配置研判服务。"
             )
             + (
-                "\n监控：" + json.dumps(self.research.monitor.config(), ensure_ascii=False)
+                "\n后台监控："
+                + ("开启" if self.research.monitor.config()["enabled"] else "关闭")
+                + "；收盘日报："
+                + ("开启" if self.research.monitor.config()["daily"] else "关闭")
+                + "；AI日报："
+                + ("开启" if self.research.monitor.config()["daily_ai"] else "关闭")
                 if self.research and self.research.monitor
                 else "\n当前入口未配置监控服务。"
             )

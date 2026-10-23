@@ -88,9 +88,9 @@ QUESTIONS = {
     "stock_target": "个股目标（可选）：目标=... 目标期限=YYYY-MM-DD 到价=提醒/复核/减仓/退出；不确定可回复 跳过。个人周期和风控继续继承。",
     "stock_thesis": "个股期待（可选）：理由=你的持有逻辑或等待入场条件；也可回复 跳过。",
     "stock_add": "个股加仓偏好尚未知：允许加仓=是/否；也可回复 跳过。允许加仓仍需满足组合风险上限。",
-    "account": "账户类型：回复 /盯盘 回答 账户=现金（或 保证金、未知）。这不接入券商交易。",
-    "strategy": "默认模板为日线趋势，观察周期 60 天。回复 /盯盘 回答 采用默认，或 策略=趋势 周期=180。",
-    "risk": "填写允许加仓、单股上限、总仓位上限与单次风险（百分数），例如格式 允许加仓=否 单股上限=... 总仓位上限=... 单次风险=...；也可回复 跳过，保留未知。",
+    "account": "账户类型：你实际使用现金账户还是保证金账户？可直接回复 现金、保证金 或 未知。这不是 Alpaca 数据凭证类型，也不接入券商交易。",
+    "strategy": "默认使用日线趋势观察，投资时间尺度为60天；不是必须持有60天。回复 采用默认，或按格式填写 策略=趋势 周期=天数。也可在插件设置的长期投资偏好中修改。",
+    "risk": "设置加仓习惯和风险限制，也可在插件设置的长期投资偏好中填写。\n允许加仓：是否愿意增加已有仓位。\n单股上限、总仓位上限：股票市值最多占账户总资产的百分比。\n单次风险：单次新增仓位从入场价跌到失效价时，计划损失占总资产的百分比，不是投入资金比例。\n按格式填写 允许加仓=是/否 单股上限=数字 总仓位上限=数字 单次风险=数字；百分数不带%号，未确定可回复 跳过，保留未知。",
     "drawdown": "可选：回撤=... 基准=成本/持仓高点/近20日高点 用途=复核/退出。也可回复 跳过，不设自动退出阈值。",
     "outlook": "大盘预期：偏多/中性/偏空 期限=YYYY-MM-DD 基准=SPY 理由=...；也可回复 暂不判断。首版仅作为背景，不直接提高仓位。",
     "notification": "日报时间偏好：日报=07:30，或 采用默认。此处只保存偏好；另行开启监控和日报后才自动发送。",
@@ -181,8 +181,11 @@ def named_patch(options: dict) -> dict:
 
 
 class Profiles:
-    def __init__(self, store: Store, configured_defaults: dict | None = None):
+    def __init__(
+        self, store: Store, configured_defaults: dict | None = None, *, timezone="Asia/Shanghai"
+    ):
         self.store = store
+        self.timezone = timezone
         configured = _validate_patch(configured_defaults or {})
         with store.transaction() as db:
             current = self._load(db)
@@ -529,20 +532,24 @@ class Profiles:
         self._write_wizard(db, state)
         return reply
 
-    @staticmethod
-    def _wizard_prompt(state):
+    def _wizard_prompt(self, state):
         if state["state"] == "review":
+            from .presentation import outlook_text, preferences_text, profile_text
+
+            draft = state["draft"]
+            summary = (
+                f"{state['scope']} 待保存的个股期待：\n"
+                + preferences_text(draft["overrides"].get(state["scope"], {}), stock=True)
+                if state.get("scope")
+                else profile_text(draft)
+            )
             return (
-                "待确认的个人设置：\n"
-                + json.dumps(
-                    state["draft"]["overrides"].get(state.get("scope"), {})
-                    if state.get("scope")
-                    else state["draft"]["defaults"],
-                    ensure_ascii=False,
-                )
-                + "\n市场预期："
-                + json.dumps(state["draft"]["outlooks"], ensure_ascii=False)
-                + "\n未填写风险仍为未知，仅提供观察。在当前入口直接回复 确认 生效，或用 /盯盘 引导 确认；不会自动订阅。"
+                "待确认，以下内容尚未生效：\n"
+                + summary
+                + "\n\n"
+                + outlook_text(draft, self.timezone)
+                + "\n未填写的风险限制仍为未知，不据此计算加仓数量。"
+                + "\n直接回复 确认 保存，返回 修改上一步，或 取消 放弃草稿；不会自动开启监控或日报。"
             )
         if state["state"] == "collecting":
             return (

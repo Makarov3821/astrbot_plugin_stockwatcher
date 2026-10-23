@@ -12,6 +12,7 @@ from .analysis import AnalysisService
 from .arguments import parse_options, required
 from .domain import ValidationError, instrument
 from .evidence import EvidenceStore
+from .presentation import outlook_text, profile_text
 from .profiles import LABELS, Profiles, named_patch
 from .sources import SourceService
 from .storage import Store
@@ -70,7 +71,7 @@ class ResearchCommands:
                 ):
                     return ""
                 db.execute("INSERT INTO settings VALUES ('onboarding_hint_shown','true')")
-                return "\n首次使用可发送 /盯盘 开始 分步设置；查行情和记账可继续使用。"
+                return "\n首次使用：在插件设置页填写长期偏好，聊天说“隐藏设置总览”查看动态记录；也可用 /盯盘 开始 逐步填写。"
 
         return await asyncio.to_thread(once)
 
@@ -137,18 +138,13 @@ class ResearchCommands:
                 result = await asyncio.to_thread(self.profiles.resolved, symbol)
             else:
                 result = await asyncio.to_thread(self.profiles.current)
-            return (
-                json.dumps(result, ensure_ascii=False, indent=2)
-                + "\n可编辑："
-                + "、".join(LABELS)
-                + "。个股字段可用 值=继承；百分数不带%号，未设置不等于0。"
-            )
+            return profile_text(result)
         if command == "大盘预期":
             if len(tokens) == 1:
                 profile = await asyncio.to_thread(self.profiles.resolved, "SPY")
-                return json.dumps(
-                    {"生效预期": profile["outlook"], "已过期": profile["expired_outlook"]},
-                    ensure_ascii=False,
+                return outlook_text(
+                    profile,
+                    self.monitor.settings.display_timezone if self.monitor else "Asia/Shanghai",
                 )
             if len(tokens) >= 3:
                 options = parse_options(tokens[2:], {"期限", "基准", "理由"})

@@ -39,6 +39,41 @@ class Monitor:
     def config(self):
         return {**DEFAULT_MONITOR, **self.store.get_setting("monitor_config", {})}
 
+    def sync_preferences(self, configured):
+        """Only changed UI fields override chat changes; first grouped UI preserves old state."""
+        previous = self.store.get_setting("notification_config_seen")
+        changes = {
+            key: value
+            for key, value in configured.items()
+            if previous is None or previous.get(key) != value
+        }
+        if previous is None and (
+            self.store.get_setting("monitor_config") is not None
+            or self.store.get_setting("notification_origin") is not None
+        ):
+            # New UI defaults must not turn off existing subscriptions on upgrade.
+            defaults = {**DEFAULT_MONITOR, "notification_origin": ""}
+            changes = {key: value for key, value in changes.items() if value != defaults.get(key)}
+        if "notification_origin" in changes:
+            self.store.set_setting(
+                "notification_origin", changes.pop("notification_origin") or None
+            )
+        if self.config()["enabled"] and not self.delivery.origin_allowed(
+            self.store.get_setting("notification_origin")
+        ):
+            changes["enabled"] = False
+        if changes:
+            if changes.get(
+                "enabled", self.config()["enabled"]
+            ) and not self.delivery.origin_allowed(self.store.get_setting("notification_origin")):
+                changes["enabled"] = False
+                self.store.set_setting(
+                    "monitor_setup_notice",
+                    "监控未开启：请在提醒与日报设置中选择白名单内的接收入口。",
+                )
+            self.configure(changes)
+        self.store.set_setting("notification_config_seen", configured)
+
     def configure(self, patch: dict):
         current = self.config()
         if set(patch) - set(DEFAULT_MONITOR):
@@ -61,6 +96,8 @@ class Monitor:
         ):
             raise ValidationError("提醒目标不在消息入口白名单中，请从已授权私聊重新选择目标。")
         with self.store.transaction() as db:
+            if current["enabled"]:
+                db.execute("DELETE FROM settings WHERE key='monitor_setup_notice'")
             db.execute(
                 "INSERT INTO settings VALUES ('monitor_config',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 (json.dumps(current),),

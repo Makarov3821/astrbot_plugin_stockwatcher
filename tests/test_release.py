@@ -117,7 +117,8 @@ def test_maintenance_missing_file_cli_fails_without_creating_it(tmp_path):
     assert not missing.exists()
 
 
-def test_release_refuses_credentials_in_example(tmp_path):
+@pytest.mark.parametrize("grouped", [False, True])
+def test_release_refuses_credentials_in_example(tmp_path, grouped):
     from scripts.build_release import ROOT_FILES
 
     root = Path(__file__).resolve().parents[1]
@@ -125,7 +126,11 @@ def test_release_refuses_credentials_in_example(tmp_path):
         (tmp_path / name).write_bytes((root / name).read_bytes())
     (tmp_path / "configs").mkdir()
     (tmp_path / "configs/minimal.json").write_text(
-        json.dumps({"alpaca_secret_key": "fixture-private-secret"})
+        json.dumps(
+            {"market_data": {"alpaca_secret_key": "fixture-private-secret"}}
+            if grouped
+            else {"alpaca_secret_key": "fixture-private-secret"}
+        )
     )
     with pytest.raises(ValueError, match="credentials"):
         build(tmp_path, tmp_path / "release")
