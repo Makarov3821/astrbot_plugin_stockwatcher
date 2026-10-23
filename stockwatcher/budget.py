@@ -14,6 +14,9 @@ from .model import ModelReply, ModelUnavailable
 
 def compact_packet(packet: dict, max_chars: int) -> dict:
     packet = copy.deepcopy(packet)
+    # Old evidence IDs are audit history, not evidence supplied for this research call.
+    if isinstance(packet.get("previous"), dict):
+        packet["previous"].pop("evidence_versions", None)
     items = packet["evidence"]["items"]
     for item in items:
         if len(item["content"]) > 1600:

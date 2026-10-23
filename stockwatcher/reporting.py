@@ -99,6 +99,74 @@ def research_lines(research, *, detailed=False):
     return lines
 
 
+def citation_diagnostics(report):
+    """Small diagnostic view; never echo complete model output or all news by default."""
+    research = report.get("model", {}).get("research") or {}
+    diagnostics = research.get("diagnostics", {})
+    lines = [f"报告 #{report['id']} 引用诊断（不重新调用模型）"]
+
+    def append_error(error):
+        lines.append("出错位置：`" + error["field"] + "`")
+        codes = {
+            "unknown_reference": "引用不在本次输入中",
+            "missing": "缺少必要引用",
+            "invalid_type": "需要引用数组",
+            "invalid_item_type": "数组含有非字符串",
+            "too_many": "引用超过数量上限",
+        }
+        lines.append("原因：" + codes.get(error["code"], error["code"]))
+        if error.get("rejected_values"):
+            lines.append(
+                "被拒绝引用：" + "、".join(f"`{value}`" for value in error["rejected_values"][:3])
+            )
+
+    if diagnostics:
+        names = {**ROLE_NAMES, "synthesis": "汇总"}
+        labels = {
+            "validated": "通过校验",
+            "rejected": "校验拒绝",
+            "unavailable": "请求未完成",
+            "cancelled": "已取消",
+            "skipped": "未调用",
+            "not_started": "未启动",
+            "requesting": "请求中",
+            "returned": "已返回",
+        }
+        for key, name in names.items():
+            item = diagnostics.get(key)
+            if not item:
+                continue
+            lines.append(f"{name}：{labels.get(item['status'], item['status'])}")
+            if item.get("citation_error"):
+                append_error(item["citation_error"])
+            elif item.get("error"):
+                lines.append("诊断：" + short(item["error"], 160))
+        lines.append("已返回的角色原始输出保存在本地报告记录中，此处不整段发送。")
+    elif research.get("errors"):
+        lines.append(
+            "这是旧报告，仅保存失败摘要，未保存失败角色原文或具体被拒绝的引用，无法追溯精确ID。"
+        )
+        for role, error in research["errors"].items():
+            lines.append(
+                f"{ROLE_NAMES.get(role, '汇总' if role == 'synthesis' else role)}：{short(error, 140)}"
+            )
+    elif report.get("model", {}).get("citation_error"):
+        append_error(report["model"]["citation_error"])
+    elif report.get("status") == "validated":
+        lines.append("这份记录没有引用校验失败。")
+    else:
+        lines.append("这份记录没有保留精确的引用失败诊断；未据此推测错误ID。")
+    references = research.get("shared_evidence_ids", [])
+    if references:
+        lines.append(
+            f"本次角色实际可用材料编号：{sum(ref.startswith('ev_') for ref in references)}个；裁掉或仅出现在历史记录中的材料不可作为本次引用。"
+        )
+    lines.append(
+        "允许精确引用实际提供的指标/账户/偏好字段与材料缺口；未知新闻编号和不存在的字段仍会被拒绝。"
+    )
+    return "\n".join(lines)
+
+
 def report_summary(report):
     packet, result = report["input"], report["result"]
     features, context = packet["metrics"], packet["portfolio"]

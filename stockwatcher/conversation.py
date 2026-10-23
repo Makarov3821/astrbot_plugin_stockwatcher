@@ -63,7 +63,7 @@ SYSTEM = """你是美股私人盯盘助理的意图识别器，不提供投资�
 一次只支持一个操作；缺少必要信息、混合多个操作、涉及尚未支持的功能或含糊指代时，返回 clarify，parameters={"question":"简短中文澄清问题"}，symbol=null。
 禁止推断未明确说过的数量、成本、风险预算、目标日期或方向；只给目标价时可仅更新该字段。相对日期用输入的纽约日期换算。用户说年底是当年12月31日。大盘方向没有期限时必须追问期限。公司名仅使用输入别名或已知股票映射，不猜测其他公司的代码。
 读取：overview 隐藏/聊天设置总览；outlook 已记录的大盘预期；stock 某只股票的生效偏好；holdings 持仓；watchlist 关注池；status 助理状态；monitor_status 监控日报状态；plans 回调计划；help 使用方式；quote 行情；analysis 普通分析；deep 多角色研究。读取的 parameters 必须为空；stock/quote/analysis/deep 必须有 symbol。
-查看报告用 report，symbol=null，parameters 可含 id（正整数）、detailed（布尔，是否查看详情）；不填id则取本入口上次查询的报告。除report之外，读取操作的parameters必须为空。
+查看报告用 report，symbol=null，parameters 可含 id（正整数）、detailed（布尔，是否查看详情）、diagnostics（布尔，是否查看引用诊断）；详情和引用诊断不要同时选。不填id则取本入口上次查询的报告。除report之外，读取操作的parameters必须为空。
 修改（只生成待确认草稿）：
 set_outlook：symbol=null，parameters 必须含 direction=偏多/中性/偏空/暂不判断、期限=YYYY-MM-DD，可含 基准=SPY、理由=文字。
 set_stock：symbol=股票代码，parameters 使用中文字段，可含 目标、目标期限、到价（提醒/复核/减仓/退出）、理由、允许加仓（是/否/未设置）、周期、回撤、基准（成本/持仓高点/近20日高点）、用途（复核/退出）、退出价、复核目标（是/否）、公司页面；未设置的字段不要出现。沿用个人值使用 继承。长期个人偏好请返回 clarify，引导去插件设置修改。
@@ -115,7 +115,7 @@ def validate_intent(data):
     if action in READS - {"report"} and params:
         raise ValidationError("查询不能夹带修改参数，请分开说明。")
     allowed = {
-        "report": {"id", "detailed"},
+        "report": {"id", "detailed", "diagnostics"},
         "clarify": {"question"},
         "set_outlook": {"direction", "期限", "基准", "理由"},
         "set_stock": set(LABELS) - {"账户", "策略", "单股上限", "总仓位上限", "单次风险", "日报"},
@@ -147,8 +147,11 @@ def validate_intent(data):
             type(params["id"]) is bool or not str(params["id"]).isdigit() or int(params["id"]) <= 0
         ):
             raise ValidationError("报告编号需要是正整数。")
-        if "detailed" in params and type(params["detailed"]) is not bool:
-            raise ValidationError("报告详情选项需要明确为是或否。")
+        for key in ("detailed", "diagnostics"):
+            if key in params and type(params[key]) is not bool:
+                raise ValidationError("报告详情和引用诊断选项需要明确为是或否。")
+        if params.get("detailed") and params.get("diagnostics"):
+            raise ValidationError("一次只选择报告详情或引用诊断。")
     if action == "set_stock":
         _validate_patch(named_patch(params), individual=True)
     if action == "set_outlook":
@@ -339,6 +342,8 @@ class Conversation:
 
     def _local_intent(self, text):
         compact = re.sub(r"[\s，。？！?！、]", "", text)
+        if compact in {"查看引用诊断", "看看引用诊断", "引用诊断"}:
+            return {"action": "report", "symbol": None, "parameters": {"diagnostics": True}}
         if compact in {
             "查看详细依据",
             "看看详细依据",
@@ -350,12 +355,16 @@ class Conversation:
             "看看上次分析的详细依据",
         }:
             return {"action": "report", "symbol": None, "parameters": {"detailed": True}}
-        match = re.fullmatch(r"(?:查看|看看)?报告#?(\d+)(详情)?", compact)
+        match = re.fullmatch(r"(?:查看|看看)?报告#?(\d+)(详情|引用诊断)?", compact)
         if match:
             return {
                 "action": "report",
                 "symbol": None,
-                "parameters": {"id": match[1], "detailed": bool(match[2])},
+                "parameters": {
+                    "id": match[1],
+                    "detailed": match[2] == "详情",
+                    "diagnostics": match[2] == "引用诊断",
+                },
             }
         if re.fullmatch(
             r"(?:请|帮我|给我|看看|查看|显示|列出)*(?:隐藏|聊天|全部|所有)(?:的)?设置(?:总览|纵览|一览)?",
@@ -610,7 +619,8 @@ class Conversation:
             if not report_id:
                 return "这个入口还没有上次分析记录；可先说“分析一下MU”，或提供报告编号，例如“报告1详情”。"
             return await self.commands.handle(
-                f"报告 {report_id}" + (" 详情" if p.get("detailed") else ""),
+                f"报告 {report_id}"
+                + (" 引用诊断" if p.get("diagnostics") else " 详情" if p.get("detailed") else ""),
                 origin=origin,
                 request_key=request_key,
             )

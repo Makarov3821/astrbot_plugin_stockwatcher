@@ -242,12 +242,16 @@ class ResearchCommands:
             )
             return json.dumps([dict(row) for row in rows], ensure_ascii=False, indent=2)
         if command == "报告" and len(tokens) in {2, 3}:
-            if len(tokens) == 3 and tokens[2] != "详情":
-                raise ValidationError("用法：报告 ID [详情]；默认显示简报。")
+            if len(tokens) == 3 and tokens[2] not in {"详情", "引用诊断"}:
+                raise ValidationError("用法：报告 ID [详情|引用诊断]；默认显示简报。")
             try:
                 report = await asyncio.to_thread(self.analysis.load, int(tokens[1]))
             except ValueError as exc:
                 raise ValidationError("报告 ID 应为整数。") from exc
+            if len(tokens) == 3 and tokens[2] == "引用诊断":
+                from .reporting import citation_diagnostics
+
+                return await asyncio.to_thread(citation_diagnostics, report)
             return await asyncio.to_thread(self.analysis.render, report, detailed=len(tokens) == 3)
         if command == "目标":
             if len(tokens) == 1:

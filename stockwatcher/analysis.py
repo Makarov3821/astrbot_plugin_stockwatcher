@@ -10,6 +10,8 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from .budget import compact_packet
+from .citations import CitationError, citation_scope
+from .citations import validate_ids as _ids
 from .domain import NEW_YORK, ValidationError, amount, instrument, iso, parse_time
 from .evidence import EvidenceStore
 from .features import metrics, quantity_cap, risk_context
@@ -21,7 +23,7 @@ from .provider import MarketError
 from .sources import SourceService
 from .storage import Store
 
-PROMPT_VERSION = "single-research-0.7.1"
+PROMPT_VERSION = "single-research-0.7.3"
 ACTION_LABELS = {
     "hold": "继续持有",
     "watch": "观察等待",
@@ -37,7 +39,7 @@ SYSTEM = """你是单人盯盘助理，判断长期持有逻辑、过程风险�
 缺少现金和仓位上限时，不生成加仓数量；仍可基于行情回答走势问题，不把账户信息缺失等同于无法观察走势。
 指标含 year_return_pct（相对上一年末收盘）、year_high/year_low（可用年内日线，按当前复权口径折算）；year_range_complete 为 false 时不能冒充完整年内统计。短暂反弹或单个技术信号不能证明最终底部，说明已知证据、尚缺确认和进一步失效条件。
 只能引用输入提供的证据 ID；指标事实引用 metrics，账户事实引用 portfolio，个人期待引用 preference。
-evidence_ids 必须是字符串数组。每一条支持/反证至少引用一个合法ID，不能留空，也不能用新闻标题、URL、ma20、risk等自造ID。仅可用 metrics、portfolio、preference 或 evidence.items 中实际存在的完整 ev_ ID。
+evidence_ids 必须是字符串数组。每一条支持/反证至少引用一个合法ID，不能留空，也不能用新闻标题、URL、ma20、risk等自造ID。可用 metrics、portfolio、preference、source_gaps，或这些输入对象中确实存在的字段路径（如metrics.ma20），或 evidence.items 中实际存在的完整 ev_ ID。字段路径逐级精确匹配，不允许不存在的字段、其他命名空间或历史材料ID。
 thesis.status 为 unknown、event_risk.level 为 unknown 时允许证据数组为空；其他状态必须有证据，事件风险还必须引用实际材料。缺少事实时使用 unknown，不猜造引用。
 区分用户目标、技术位置和估值情景。没有经核实的年度 EPS 数据不得生成估值目标；目标只可用输入的年度 EPS 乘你明确假设的正估值倍数，标记为情景，不称预测或合理价值证明。
 保持支持理由和反证，缺少材料可选择 unknown/insufficient。短期高风险不必然意味着长期逻辑失效。
@@ -65,19 +67,6 @@ def _string(value, maximum=1500) -> str:
     if re.search(r"(?:胜率|上涨概率|下跌概率|亏损概率)[^。\n]{0,20}\d+(?:\.\d+)?\s*%", value):
         raise ValidationError("拒绝展示模型自报的未经校准概率或胜率。")
     return value
-
-
-def _ids(value, known: set[str], *, nonempty=False, field="evidence_ids") -> list[str]:
-    if (
-        not isinstance(value, list)
-        or len(value) > 10
-        or any(not isinstance(item, str) or item not in known for item in value)
-        or (nonempty and not value)
-    ):
-        if isinstance(value, list) and not value and nonempty:
-            raise ValidationError(f"AI引用校验失败：{field} 缺少必要引用。")
-        raise ValidationError(f"AI引用校验失败：{field} 含有未提供的证据ID或格式错误。")
-    return list(dict.fromkeys(value))
 
 
 def validate_reply(reply: ModelReply, packet: dict, now: datetime) -> dict:
@@ -129,7 +118,7 @@ def validate_reply(reply: ModelReply, packet: dict, now: datetime) -> dict:
             raise ValidationError("模型的观察期限或有效期无效。")
     _string(data["summary"])
     evidence = {item["evidence_id"]: item for item in packet["evidence"]["items"]}
-    known = set(evidence) | {"metrics", "portfolio", "preference"}
+    known = citation_scope(packet)
     for key in ("reasons", "counterarguments"):
         if not isinstance(data[key], list) or not 1 <= len(data[key]) <= 8:
             raise ValidationError("模型必须分别提供支持理由与反证。")
@@ -522,6 +511,8 @@ class AnalysisService:
                     status = "validated"
                 except (ModelUnavailable, ValidationError) as exc:
                     result["warnings"].append(str(exc))
+                    if isinstance(exc, CitationError):
+                        model_metadata["citation_error"] = exc.diagnostic
                     model_metadata.update(getattr(exc, "metadata", {}))
             else:
                 result["warnings"].append("尚未提供 AstrBot 模型适配器")

@@ -8,6 +8,7 @@ import re
 
 from .analysis import _ids, _string, validate_reply
 from .budget import compact_packet
+from .citations import CitationError, citation_scope
 from .domain import ValidationError, parse_time
 from .model import ModelReply, ModelUnavailable
 
@@ -23,11 +24,11 @@ ROLE_SYSTEM = """你是股票研究角色，只使用给定同一时点证据。
 只输出 JSON：{"role":"指定角色代码","horizon_days":60,"stance":"support|oppose|mixed|unknown",
 "arguments":[{"text":"简短证据结论","evidence_ids":["metrics"]}],
 "uncertainties":[{"text":"反证/信息缺口","evidence_ids":["metrics"]}]}
-两类论证各1～4条，每条最多450字，只引用输入证据 ID、metrics、portfolio、preference。
+两类论证各1～4条，每条最多450字，只引用输入证据 ID、metrics、portfolio、preference、source_gaps及这些输入对象中实际存在的字段路径。
 不同观察期限可以产生不同观点，不将短期风险与长期逻辑混同。"""
 ROLE_SYSTEM += """\n优先回应packet.user_question提出的问题，按focus承担的角度论证，不要求每个角色复述同一组均线数字。
 基本面区分已核实的财务事实、外部叙事和缺失数据；技术面给走势证据与确认条件；事件角色区分已发生事件与未知日历；多方和空方各自给最强论点及其失效条件。证据不足可以用unknown，不为制造分歧而编结论。
-严格使用输入role代码。arguments和uncertainties每条都需至少一个合法引用：价格事实用metrics，账户事实用portfolio，偏好用preference，材料只能用packet.evidence.items中的完整ev_编号；不把标题或URL当作编号。"""
+严格使用输入role代码。arguments和uncertainties每条都需至少一个合法引用：价格事实用metrics或实际存在的metrics.ma20这类字段路径，账户事实用portfolio，偏好用preference，材料缺口用source_gaps；新闻或财报只能用packet.evidence.items中的完整ev_编号，不把标题、URL或历史材料编号当作本次证据。"""
 
 
 def validate_role(text, role, known):
@@ -84,30 +85,38 @@ class DeepResearch:
         packet = compact_packet(
             json.loads(prompt), max(6000, self.settings.model_max_input_chars - 8000)
         )
-        known = {item["evidence_id"] for item in packet["evidence"]["items"]} | {
-            "metrics",
-            "portfolio",
-            "preference",
-        }
+        known = citation_scope(packet)
         semaphore = asyncio.Semaphore(self.settings.deep_concurrency)
         results, errors, metadata = {}, {}, {}
+        diagnostics = {role: {"status": "not_started"} for role in (*ROLES, "synthesis")}
 
         def research_metadata(quality):
             return {
                 "mode": "deep",
                 "research": {
                     "quality": quality,
-                    "version": "five-roles-v2",
+                    "version": "five-roles-v3",
                     "roles": results,
                     "errors": errors,
                     "role_metadata": metadata,
                     "call_ceiling": 6,
                     "shared_evidence_ids": sorted(known),
+                    "diagnostics": diagnostics,
+                    "role_input_evidence": [
+                        {
+                            "evidence_id": item["evidence_id"],
+                            "version": item["version"],
+                            "supplied_chars": len(item["content"]),
+                            "truncated": item.get("prompt_truncated", False),
+                        }
+                        for item in packet["evidence"]["items"]
+                    ],
                 },
             }
 
         async def role_call(role):
             async with semaphore:
+                diagnostics[role] = {"status": "requesting"}
                 try:
                     reply = await self.model.generate(
                         ROLE_SYSTEM,
@@ -119,15 +128,27 @@ class DeepResearch:
                         purpose=f"deep:{role}",
                         max_output_tokens=min(1200, self.settings.model_max_output_tokens),
                     )
-                    results[role] = validate_role(reply.text, role, known)
+                    diagnostics[role].update(raw_response=reply.text[:40000], status="returned")
                     metadata[role] = reply.metadata
+                    results[role] = validate_role(reply.text, role, known)
+                    diagnostics[role]["status"] = "validated"
                 except (ModelUnavailable, ValidationError) as exc:
                     errors[role] = str(exc)
+                    diagnostics[role].update(
+                        status="rejected" if isinstance(exc, ValidationError) else "unavailable",
+                        error=str(exc),
+                    )
+                    if isinstance(exc, CitationError):
+                        diagnostics[role]["citation_error"] = exc.diagnostic
+                except asyncio.CancelledError:
+                    diagnostics[role]["status"] = "cancelled"
+                    raise
 
         try:
             async with asyncio.timeout(self.settings.deep_timeout_seconds):
                 await asyncio.gather(*(role_call(role) for role in ROLES))
                 if not results:
+                    diagnostics["synthesis"]["status"] = "skipped"
                     raise ModelUnavailable("五个研究角色均未完成，未启动汇总，也未形成深度结论。")
                 compact_roles = {
                     role: {
@@ -154,10 +175,13 @@ class DeepResearch:
                     },
                     ensure_ascii=False,
                 )
+                diagnostics["synthesis"]["status"] = "requesting"
                 reply = await self.model.generate(
                     system, synthesis, origin, purpose="deep:synthesis"
                 )
+                diagnostics["synthesis"].update(raw_response=reply.text[:40000], status="returned")
                 validate_reply(reply, packet, parse_time(packet["generated_at"]))
+                diagnostics["synthesis"]["status"] = "validated"
         except (TimeoutError, ModelUnavailable, ValidationError) as exc:
             message = (
                 "深度研究达到总超时，已取消未完成角色，本次退回程序观察。"
@@ -165,6 +189,16 @@ class DeepResearch:
                 else f"深度汇总不可用：{exc}"
             )
             errors["synthesis"] = message
+            diagnostics["synthesis"].update(
+                status="skipped"
+                if diagnostics["synthesis"]["status"] == "skipped"
+                else "rejected"
+                if isinstance(exc, ValidationError)
+                else "unavailable",
+                error=message,
+            )
+            if isinstance(exc, CitationError):
+                diagnostics["synthesis"]["citation_error"] = exc.diagnostic
             failure = ModelUnavailable(message)
             failure.metadata = research_metadata("failed")
             raise failure from exc
