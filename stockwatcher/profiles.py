@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal
@@ -345,6 +346,8 @@ class Profiles:
         *,
         now: datetime | None = None,
         symbol: str | None = None,
+        origin: str | None = None,
+        request_key: str | None = None,
     ) -> str:
         now = now or datetime.now(UTC)
         options = options or {}
@@ -353,6 +356,22 @@ class Profiles:
             profile = self._load(db)
             row = db.execute("SELECT value FROM settings WHERE key='onboarding_state'").fetchone()
             state = json.loads(row[0]) if row else None
+            receipt_key = self.wizard_receipt_key(request_key, origin, action, options, symbol)
+            if state and receipt_key in state.get("receipts", {}):
+                return state["receipts"][receipt_key]
+            if state and state["state"] not in {"cancelled", "completed"} and origin:
+                if action == "状态" and state.get("origin") not in {None, origin}:
+                    return "引导草稿位于另一入口；可用 /盯盘 引导 继续 明确转到当前入口。"
+                if state.get("origin") not in {None, origin} and action not in {
+                    "开始",
+                    "继续",
+                    "状态",
+                }:
+                    raise ValidationError(
+                        "引导正在另一入口进行；请用 /盯盘 引导 继续 明确转到当前入口。"
+                    )
+                if action != "状态":
+                    state["origin"] = origin
             if (
                 action == "开始"
                 and symbol
@@ -392,6 +411,8 @@ class Profiles:
                     "index": 0,
                     "touched_at": iso(now),
                     "scope": symbol,
+                    "origin": origin,
+                    "receipts": {},
                 }
             elif state is None:
                 raise ValidationError("尚未开始引导，请用 /盯盘 开始。")
@@ -419,8 +440,9 @@ class Profiles:
                     raise ValidationError("引导未在收集状态，请查看 /盯盘 引导 状态。")
                 if now - parse_time(state["touched_at"]) > timedelta(hours=24):
                     state["state"] = "paused"
-                    self._write_wizard(db, state)
-                    return "引导已暂停，草稿仍保留。使用 /盯盘 引导 继续。"
+                    return self._save_wizard_reply(
+                        db, state, "引导已暂停，草稿仍保留。使用 /盯盘 引导 继续。", receipt_key
+                    )
                 step = state["steps"][state["index"]]
                 control = options.get("control")
                 if step == "outlook":
@@ -486,30 +508,53 @@ class Profiles:
             state["touched_at"] = iso(now)
             if state["state"] == "collecting" and state["index"] == len(state["steps"]):
                 state["state"] = "review"
-            self._write_wizard(db, state)
-            if state["state"] == "review":
-                return (
-                    "待确认的个人设置：\n"
-                    + json.dumps(
-                        state["draft"]["overrides"].get(state.get("scope"), {})
-                        if state.get("scope")
-                        else state["draft"]["defaults"],
-                        ensure_ascii=False,
-                    )
-                    + "\n市场预期："
-                    + json.dumps(state["draft"]["outlooks"], ensure_ascii=False)
-                    + "\n未填写风险仍为未知，仅提供观察。回复 /盯盘 引导 确认 生效；不会自动订阅。"
+            return self._save_wizard_reply(db, state, self._wizard_prompt(state), receipt_key)
+
+    @staticmethod
+    def wizard_receipt_key(request_key, origin, action, options, symbol=None):
+        if not request_key:
+            return None
+        return hashlib.sha256(
+            json.dumps(
+                [request_key, origin, action, options, symbol], ensure_ascii=False, sort_keys=True
+            ).encode()
+        ).hexdigest()
+
+    def _save_wizard_reply(self, db, state, reply, receipt_key):
+        if receipt_key:
+            receipts = state.setdefault("receipts", {})
+            receipts[receipt_key] = reply
+            while len(receipts) > 32:
+                receipts.pop(next(iter(receipts)))
+        self._write_wizard(db, state)
+        return reply
+
+    @staticmethod
+    def _wizard_prompt(state):
+        if state["state"] == "review":
+            return (
+                "待确认的个人设置：\n"
+                + json.dumps(
+                    state["draft"]["overrides"].get(state.get("scope"), {})
+                    if state.get("scope")
+                    else state["draft"]["defaults"],
+                    ensure_ascii=False,
                 )
-            if state["state"] == "collecting":
-                return (
-                    f"步骤 {state['index'] + 1}/{len(state['steps'])}："
-                    + QUESTIONS[state["steps"][state["index"]]]
-                )
-            return {
-                "paused": "已暂停，草稿已保存。",
-                "cancelled": "已取消，生效设置未改变。",
-                "completed": "设置已生效。添加股票后可用 /盯盘 设置 MU 单独定制。",
-            }[state["state"]]
+                + "\n市场预期："
+                + json.dumps(state["draft"]["outlooks"], ensure_ascii=False)
+                + "\n未填写风险仍为未知，仅提供观察。在当前入口直接回复 确认 生效，或用 /盯盘 引导 确认；不会自动订阅。"
+            )
+        if state["state"] == "collecting":
+            return (
+                f"步骤 {state['index'] + 1}/{len(state['steps'])}："
+                + QUESTIONS[state["steps"][state["index"]]]
+                + "\n当前入口可直接回复 跳过 或按本步格式填写；暂停可回复 暂停，之后用 /盯盘 引导 继续 恢复。"
+            )
+        return {
+            "paused": "已暂停，草稿已保存；普通聊天不再接管。用 /盯盘 引导 继续 恢复。",
+            "cancelled": "已取消，生效设置未改变。",
+            "completed": "设置已生效。添加股票后可用 /盯盘 设置 MU 单独定制。",
+        }[state["state"]]
 
     @staticmethod
     def _write_wizard(db, state: dict) -> None:

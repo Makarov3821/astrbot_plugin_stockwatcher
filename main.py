@@ -25,7 +25,7 @@ from .stockwatcher.model import AstrBotModel
 from .stockwatcher.monitor import Monitor
 from .stockwatcher.profiles import Profiles
 from .stockwatcher.provider import AlpacaProvider, MarketError
-from .stockwatcher.research_commands import ResearchCommands
+from .stockwatcher.research_commands import ResearchCommands, looks_like_wizard_reply
 from .stockwatcher.sources import PublicSources, SourceService
 from .stockwatcher.storage import Store
 
@@ -143,6 +143,53 @@ class StockWatcherPlugin(Star):
             return False
         return await self.context.send_message(origin, MessageChain().message(text))
 
+    @staticmethod
+    def _request_key(event, origin):
+        message_id = getattr(getattr(event, "message_obj", None), "message_id", "")
+        return hashlib.sha256(f"{origin}:{message_id}".encode()).hexdigest() if message_id else None
+
+    @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE, priority=100)
+    async def wizard_reply(self, event: AstrMessageEvent):
+        """接收当前授权入口的引导短回答；普通聊天和显式指令不接管。"""
+        origin = event_private_origin(event)
+        if self._closing or not self._origin_allowed(origin) or self.research is None:
+            return
+        text = event.get_message_str().strip()
+        if not looks_like_wizard_reply(text):
+            return
+        # WakingStage may strip a wake prefix. Registered commands still take precedence.
+        handlers = event.get_extra("activated_handlers", []) or []
+        if any(
+            type(item).__name__ in {"CommandFilter", "CommandGroupFilter"}
+            for handler in handlers
+            for item in getattr(handler, "event_filters", [])
+        ):
+            return
+        task = asyncio.create_task(
+            self.research.chat_reply(
+                text, origin=origin, request_key=self._request_key(event, origin)
+            )
+        )
+        self._tasks.add(task)
+        try:
+            response = await task
+        except Exception as exc:
+            logger.error("StockWatcher wizard reply failed (%s)", type(exc).__name__)
+            response = (
+                "本次引导回答未完成，请用 /盯盘 引导 状态 检查草稿；未由普通聊天模型代为确认。"
+            )
+        finally:
+            self._tasks.discard(task)
+        if response is None:
+            return
+        for part in message_parts(response):
+            if not self._origin_allowed(origin):
+                event.stop_event()
+                return
+            yield event.plain_result(part)
+        # Stop only AFTER yielding the response, so AstrBot's response stage can send it.
+        event.stop_event()
+
     async def _push_test(self, current_origin: str) -> str:
         assert self.store is not None
         target = await asyncio.to_thread(
@@ -194,12 +241,7 @@ class StockWatcherPlugin(Star):
                 yield event.plain_result("StockWatcher 正在关闭，请稍后重试。")
                 return
             assert self.commands is not None
-            message_id = getattr(getattr(event, "message_obj", None), "message_id", "")
-            request_key = (
-                hashlib.sha256(f"{origin}:{message_id}".encode()).hexdigest()
-                if message_id
-                else None
-            )
+            request_key = self._request_key(event, origin)
             words = text.split()
             if len(words) == 2 and words[-1] == "推送测试":
                 coroutine = self._push_test(origin)

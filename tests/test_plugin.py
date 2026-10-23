@@ -50,7 +50,11 @@ def plugin_module(monkeypatch, tmp_path):
         "astrbot.api.event": {
             "AstrMessageEvent": object,
             "MessageChain": MessageChain,
-            "filter": types.SimpleNamespace(command=command),
+            "filter": types.SimpleNamespace(
+                command=command,
+                EventMessageType=types.SimpleNamespace(PRIVATE_MESSAGE="private"),
+                event_message_type=lambda *args, **kwargs: lambda handler: handler,
+            ),
         },
         "astrbot.api.star": {"Star": Star, "StarTools": StarTools, "Context": object},
     }.items():
@@ -71,6 +75,14 @@ class Event:
 
     def __init__(self, text):
         self.text = text
+        self.extra = {}
+        self.stopped = False
+
+    def get_extra(self, key, default=None):
+        return self.extra.get(key, default)
+
+    def stop_event(self):
+        self.stopped = True
 
     def get_message_type(self):
         return types.SimpleNamespace(value="FriendMessage")

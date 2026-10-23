@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shlex
 import uuid
 from datetime import UTC, datetime
 
@@ -14,6 +15,29 @@ from .evidence import EvidenceStore
 from .profiles import LABELS, Profiles, named_patch
 from .sources import SourceService
 from .storage import Store
+
+WIZARD_ACTIONS = {"确认", "暂停", "返回", "取消", "继续", "状态"}
+WIZARD_CHOICES = {"采用默认", "跳过", "暂不判断"}
+
+
+def looks_like_wizard_reply(text: str) -> bool:
+    text = text.strip()
+    first = text.split(maxsplit=1)[0] if text else ""
+    return (
+        text in WIZARD_ACTIONS | WIZARD_CHOICES | {"现金", "保证金", "未知", "是", "否"}
+        or first in {"偏多", "中性", "偏空"}
+        or ("=" in first and first.partition("=")[0] in set(LABELS) | {"期限"})
+    )
+
+
+def answer_options(tokens: list[str]) -> dict:
+    if len(tokens) == 1 and tokens[0] in WIZARD_CHOICES:
+        return {"control": tokens[0]}
+    if tokens and tokens[0] in {"偏多", "中性", "偏空"}:
+        options = parse_options(tokens[1:], {"期限", "基准", "理由"})
+        required(options, "期限")
+        return {**options, "direction": tokens[0]}
+    return parse_options(tokens, set(LABELS))
 
 
 class ResearchCommands:
@@ -81,21 +105,24 @@ class ResearchCommands:
             return await self._monitor_command(tokens)
         if command == "开始" and len(tokens) in {1, 2}:
             return await asyncio.to_thread(
-                self.profiles.wizard, "开始", symbol=tokens[1] if len(tokens) == 2 else None
+                self.profiles.wizard,
+                "开始",
+                symbol=tokens[1] if len(tokens) == 2 else None,
+                origin=origin,
+                request_key=request_key,
             )
         if command == "引导" and len(tokens) == 2:
-            return await asyncio.to_thread(self.profiles.wizard, tokens[1])
+            return await asyncio.to_thread(
+                self.profiles.wizard, tokens[1], origin=origin, request_key=request_key
+            )
         if command == "回答" and len(tokens) >= 2:
-            rest = tokens[1:]
-            if len(rest) == 1 and rest[0] in {"采用默认", "跳过", "暂不判断"}:
-                options = {"control": rest[0]}
-            elif rest[0] in {"偏多", "中性", "偏空"}:
-                options = parse_options(rest[1:], {"期限", "基准", "理由"})
-                required(options, "期限")
-                options["direction"] = rest[0]
-            else:
-                options = parse_options(rest, set(LABELS))
-            return await asyncio.to_thread(self.profiles.wizard, "回答", options)
+            return await asyncio.to_thread(
+                self.profiles.wizard,
+                "回答",
+                answer_options(tokens[1:]),
+                origin=origin,
+                request_key=request_key,
+            )
         if command == "设置":
             symbol, rest = None, tokens[1:]
             if rest and "=" not in rest[0]:
@@ -222,6 +249,42 @@ class ResearchCommands:
                 )
             raise ValidationError("用法：目标 [采用|拒绝 候选ID]。")
         return None
+
+    async def chat_reply(self, text: str, *, origin: str, request_key: str | None) -> str | None:
+        """Consume only supported replies for this origin's persisted active wizard."""
+        state = await asyncio.to_thread(self.store.get_setting, "onboarding_state")
+        if state and state.get("origin") is None and state["state"] in {"collecting", "review"}:
+            return "旧版引导草稿尚未绑定当前入口。请先发送 /盯盘 引导 继续，再直接回复；本次回答未保存。"
+        if not state or state.get("origin") != origin:
+            return None
+        try:
+            action = text if text in WIZARD_ACTIONS else "回答"
+            if text in {"现金", "保证金", "未知"}:
+                options = {"账户": text}
+            elif text in {"是", "否"}:
+                options = {"允许加仓": text}
+            else:
+                options = answer_options(shlex.split(text)) if action == "回答" else {}
+            receipt = self.profiles.wizard_receipt_key(request_key, origin, action, options)
+            if receipt in state.get("receipts", {}):
+                return state["receipts"][receipt]
+            if state["state"] not in {"collecting", "review"}:
+                return None
+            return await asyncio.to_thread(
+                self.profiles.wizard, action, options, origin=origin, request_key=request_key
+            )
+        except (ValidationError, ValueError) as exc:
+            if state["state"] not in {"collecting", "review"}:
+                return None
+            return (
+                "本次引导回答未保存："
+                + (
+                    str(exc)
+                    if isinstance(exc, ValidationError)
+                    else "引号未闭合，请按提示的 键=值 格式填写。"
+                )
+                + "\n可用 /盯盘 引导 状态 查看当前步骤。"
+            )
 
     async def _monitor_command(self, tokens):
         command = tokens[0]

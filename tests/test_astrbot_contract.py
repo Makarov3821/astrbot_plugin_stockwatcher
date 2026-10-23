@@ -96,7 +96,11 @@ def actual_contract(monkeypatch):
         "astrbot.api.event": {
             "AstrMessageEvent": Event,
             "MessageChain": object,
-            "filter": types.SimpleNamespace(command=command),
+            "filter": types.SimpleNamespace(
+                command=command,
+                EventMessageType=types.SimpleNamespace(PRIVATE_MESSAGE="private"),
+                event_message_type=lambda *args, **kwargs: lambda handler: handler,
+            ),
         },
     }.items():
         module = types.ModuleType(name)
