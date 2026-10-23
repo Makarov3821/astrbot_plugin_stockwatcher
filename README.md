@@ -2,21 +2,23 @@
 
 面向单人使用的 AstrBot 插件。首先支持美股，免费数据优先、接受延迟，提供持仓账本和按需 AI 决策辅助。
 
-当前 `v0.5.1` 是第 01～10 步的安装测试修订版：持仓/关注、成交账本、个人引导、证据化 AI 研判、条件监控、收盘日报和按需多角色研究。不自动下单。真实 AstrBot、数据账户和平台仍需安装后验收，详见 [验证记录](docs/VALIDATION.md)。
+当前 `v0.6.0` 是第 01～10 步的安装测试修订版：持仓/关注、成交账本、个人引导、证据化 AI 研判、条件监控、收盘日报和按需多角色研究。不自动下单。真实 AstrBot、数据账户和平台仍需安装后验收，详见 [验证记录](docs/VALIDATION.md)。
 
 **首次安装请看 [安装与试用步骤](docs/INSTALL_TEST.md)**。开发目录的 `dist/` 提供 ZIP 和 SHA-256 校验文件；包内含源提交与逐文件哈希清单。ZIP 不含 AstrBot 本地软链接、虚拟环境、凭证或个人数据库。
 
 ## 安装
 
-目标环境：Python 3.12+、AstrBot `>=4.28.2,<5`，建议先用 `4.29.1` 或更新的兼容版本。本次接入审查已成功更新并核对本地 master `fc6b326`（版本文件标为 `4.29.1`）；整个声明版本范围尚未做运行验证。
+目标环境：Python 3.12+、AstrBot `>=4.28.2,<5`，建议先用 `4.29.1` 或更新的兼容版本。注册/指令审查参考 `fc6b326`，入口白名单实现前已更新并核对 master `0cd42bd` 的会话和消息类型接口；整个声明版本范围尚未做运行验证。
 
 1. 在 AstrBot 插件管理中通过仓库地址 `https://github.com/Makarov3821/astrbot_plugin_stockwatcher` 安装；也可将本仓库置于 `data/plugins/astrbot_plugin_stockwatcher/`。
 2. 让 AstrBot 安装 `requirements.txt` 中的依赖；也可在其 Python 环境执行 `pip install -r requirements.txt`。
-3. 重载插件，发送 `/盯盘 帮助`、`/盯盘 状态`。也支持 `/stockwatch` 别名。
+3. 在需要授权的私聊发送 `/盯盘 入口`，将返回的完整 UMO 添加到插件设置的「消息入口白名单」。至少一项，可添加多个；保存并重载后再发送 `/盯盘 帮助`、`/盯盘 状态`。也支持 `/stockwatch` 别名。
 4. 行情需要 Alpaca 凭证；账本无需行情或模型配置即可使用。
 5. 发送 `/盯盘 开始` 分步设置个人偏好；用 `/盯盘 开始 MU` 只补充个股缺少的期待。
 
-插件数据存于宿主的 `data/plugin_data/astrbot_plugin_stockwatcher/stockwatcher.sqlite3`，不会写入插件源代码目录。使用个人可控的 AstrBot 入口，访问控制沿用宿主设置。
+插件数据存于宿主的 `data/plugin_data/astrbot_plugin_stockwatcher/stockwatcher.sqlite3`，不会写入插件源代码目录。业务指令仅接受白名单中的私聊入口，宿主访问控制继续叠加生效。未配置至少一个合法入口时，业务和自动任务停用；只读 `/盯盘 入口` 仅显示本会话标识，不自动授权。
+
+白名单字段为 `allowed_origins`，按 `平台实例ID:FriendMessage:会话ID` 精确匹配，支持多个平台和多个私聊入口。请复制 `/盯盘 入口` 的输出，不使用昵称、单独的 QQ 号或通配符。所有获准入口均可读写同一份个人数据。旧版升级也须先补齐白名单；提醒接收会话必须仍在白名单内。[入口白名单说明](docs/ACCESS_CONTROL.md)。
 
 ## 配置与行情验证
 

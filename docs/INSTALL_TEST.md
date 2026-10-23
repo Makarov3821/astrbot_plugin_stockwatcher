@@ -1,14 +1,15 @@
-# v0.5.1 首次安装与试用
+# v0.6.0 首次安装与试用
 
 这是首个可安装测试版。离线测试已覆盖关键链路，真实平台、模型输出和免费数据权限留待你的环境验收；功能完成不代表策略收益已验证。先用一只关注股和少量真实记录试用。
 
 ## 安装
 
 1. 使用 Python 3.12+ 的 AstrBot。推荐先用接口核对过的 `4.29.1` 或兼容更新版本；声明的范围不代表所有版本均已实测。
-2. 从开发机 `dist/` 取 `astrbot_plugin_stockwatcher-v0.5.1.zip` 和同名 `.sha256`。可用 `sha256sum -c astrbot_plugin_stockwatcher-v0.5.1.zip.sha256` 核对。
+2. 从开发机 `dist/` 取 `astrbot_plugin_stockwatcher-v0.6.0.zip` 和同名 `.sha256`。可用 `sha256sum -c astrbot_plugin_stockwatcher-v0.6.0.zip.sha256` 核对。
 3. 在 AstrBot 插件管理的本地 ZIP 安装入口上传。也可将 ZIP 中的 `astrbot_plugin_stockwatcher` 文件夹放入宿主 `data/plugins/`，确保 `main.py` 直接位于该文件夹下，不要套两层目录。
 4. 安装 `requirements.txt` 依赖并重载插件。宿主无法自动安装时，在其实际 Python 环境执行 `python -m pip install -r data/plugins/astrbot_plugin_stockwatcher/requirements.txt`。Docker 用户在容器使用的环境安装，勿只装在宿主机另一个 Python 中。
-5. 发 `/盯盘 帮助`、`/盯盘 状态`。出现 `StockWatcher 0.5.1` 与数据库版本 `4` 即完成入口和存储的第一项检查。
+5. 先在私聊发送 `/盯盘 入口`，复制完整 UMO 到插件设置的“消息入口白名单”，至少一项，可添加多个；保存并重载。空白名单仅能查询本会话标识，其他业务和自动任务不启用。
+6. 从白名单私聊发 `/盯盘 帮助`、`/盯盘 状态`。出现 `StockWatcher 0.6.0` 与数据库版本 `4` 即完成入口和存储的第一项检查。其他入口和群聊应被拒绝。
 
 ZIP 不包含 AstrBot 源码、开发环境或数据库，运行不依赖开发机的 `astrbot-temp` 软链接。包内 `RELEASE_MANIFEST.json` 记录源提交、源码是否有未提交变动及逐文件哈希。重新打包可在仓库根目录执行 `python scripts/build_release.py`。
 
@@ -16,6 +17,7 @@ ZIP 不包含 AstrBot 源码、开发环境或数据库，运行不依赖开发�
 
 | 项目 | 如何填写 |
 | --- | --- |
+| 入口白名单，必填 | `allowed_origins` 至少一个完整私聊 UMO；用 `/盯盘 入口` 查询，可逐项添加多个，仅允许精确匹配 |
 | Alpaca | 配置页 `alpaca_key_id`、`alpaca_secret_key`，或进程环境 `APCA_API_KEY_ID`、`APCA_API_SECRET_KEY`；`paper/live` 与凭证一致 |
 | SEC | `sec_user_agent` 填插件标识及自己的真实联系邮箱；不填则跳过 SEC，报告显示缺口 |
 | AI | 先在 AstrBot 配好模型；插件 `model_provider_id` 留空沿用当前会话，无需新建厂商密钥 |
@@ -23,7 +25,7 @@ ZIP 不包含 AstrBot 源码、开发环境或数据库，运行不依赖开发�
 | 时区 | 默认 `Asia/Shanghai`；美股交易时间按纽约日历处理 |
 | 监控 | 默认关闭。接收会话、监控、日报均从聊天显式选择；默认程序日报，不调用 AI |
 
-`configs/minimal.json` 是无凭证示例，可对照配置页填写；不用把示例另放成运行配置文件。凭证不要发到聊天。未知的资产、风险限制保持未知；安装模板不会代你决定风险承受能力。
+`configs/minimal.json` 是无凭证示例，白名单也留空，复制示例本身不会授权任何入口。请先补齐自己的私聊 UMO，可对照配置页填写；不用把示例另放成运行配置文件。凭证不要发到聊天。未知的资产、风险限制保持未知；安装模板不会代你决定风险承受能力。
 
 ## 第一轮手工测试
 
@@ -67,6 +69,8 @@ ZIP 不包含 AstrBot 源码、开发环境或数据库，运行不依赖开发�
 `/盯盘 备份` 用 SQLite 备份 API 在线生成一致性快照，文件位于宿主插件数据目录的 `backups/`，权限设为当前用户读写；`备份 列表` 显示最近文件名。快照含持仓、偏好和报告等个人信息，不含宿主配置里的行情密钥；宿主配置由你另行备份。备份与历史不会自动清除，需按磁盘空间自行归档。
 
 升级前生成一份备份并复制到插件目录以外的可靠位置。数据目录通常为 `data/plugin_data/astrbot_plugin_stockwatcher/`。不要只在运行中复制单个主数据库文件而漏掉 WAL。
+
+从 v0.5.x 升级时，需先配置新增的入口白名单。空白名单不会删除旧数据，但业务和自动任务停用；旧提醒目标也必须在新白名单内。详细边界见 [入口控制](ACCESS_CONTROL.md)。
 
 恢复必须先停用插件，保留整个原数据目录（包括 WAL/SHM），不要覆盖唯一原件。在插件目录、使用宿主 Python 执行，例如：
 

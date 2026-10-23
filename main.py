@@ -10,6 +10,7 @@ from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.star import Context, Star, StarTools
 
+from .stockwatcher.access import allowed_origins, event_private_origin, is_identity_command
 from .stockwatcher.analysis import AnalysisService
 from .stockwatcher.budget import BudgetedModel
 from .stockwatcher.commands import Commands
@@ -32,7 +33,9 @@ from .stockwatcher.storage import Store
 class StockWatcherPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
+        self._raw_config = config
         self.settings = Settings.from_mapping(config)
+        self._access_notice_logged = False
         self._init_lock = asyncio.Lock()
         self._tasks: set[asyncio.Task] = set()
         self._closing = False
@@ -44,10 +47,26 @@ class StockWatcherPlugin(Star):
         self.monitor: Monitor | None = None
         self._worker: asyncio.Task | None = None
 
+    def _allowed_origins(self) -> tuple[str, ...]:
+        try:
+            return allowed_origins(self._raw_config.get("allowed_origins", []))
+        except ValidationError:
+            return ()
+
+    def _origin_allowed(self, origin: str) -> bool:
+        return bool(origin) and origin in self._allowed_origins()
+
     async def initialize(self) -> None:
         """打开宿主数据目录并启动可取消的巡检任务；未订阅时不请求行情。"""
         async with self._init_lock:
             if self.commands is not None or self._closing:
+                return
+            if not self._allowed_origins():
+                if not self._access_notice_logged:
+                    logger.warning(
+                        "StockWatcher 消息入口白名单至少需要一项；业务和自动任务未启动，仅 /盯盘 入口 可用。"
+                    )
+                    self._access_notice_logged = True
                 return
             path = (
                 Path(StarTools.get_data_dir("astrbot_plugin_stockwatcher")) / "stockwatcher.sqlite3"
@@ -79,7 +98,9 @@ class StockWatcherPlugin(Star):
                     timeout_seconds=self.settings.model_timeout_seconds,
                     concurrency=self.settings.deep_concurrency,
                 )
-                model = BudgetedModel(adapter, self.store, self.settings)
+                model = BudgetedModel(
+                    adapter, self.store, self.settings, origin_allowed=self._origin_allowed
+                )
                 analysis = AnalysisService(
                     self.store, profiles, ledger, market, evidence, sources, model
                 )
@@ -88,7 +109,12 @@ class StockWatcherPlugin(Star):
                 self.research = ResearchCommands(self.store, profiles, evidence, sources, analysis)
                 self.monitor = Monitor(
                     analysis,
-                    Delivery(self.store, self._send, timezone=self.settings.display_timezone),
+                    Delivery(
+                        self.store,
+                        self._send,
+                        timezone=self.settings.display_timezone,
+                        origin_allowed=self._origin_allowed,
+                    ),
                     self.settings,
                 )
                 self.research.monitor = self.monitor
@@ -113,6 +139,8 @@ class StockWatcherPlugin(Star):
         return result
 
     async def _send(self, origin: str, text: str):
+        if not self._origin_allowed(origin):
+            return False
         return await self.context.send_message(origin, MessageChain().message(text))
 
     async def _push_test(self, current_origin: str) -> str:
@@ -122,10 +150,11 @@ class StockWatcherPlugin(Star):
         )
         if not target:
             target = current_origin
+        if not self._origin_allowed(target):
+            return "提醒目标不在消息入口白名单中；请从已授权私聊使用 /盯盘 提醒目标 当前 重新选择。"
         try:
-            found = await self.context.send_message(
-                target,
-                MessageChain().message("StockWatcher 主动消息测试：此消息不代表已启动自动盯盘。"),
+            found = await self._send(
+                target, "StockWatcher 主动消息测试：此消息不代表已启动自动盯盘。"
             )
         except Exception:
             # Platform exceptions may contain tokens or session addresses. Do not echo them.
@@ -137,17 +166,34 @@ class StockWatcherPlugin(Star):
     @filter.command("盯盘", alias={"stockwatch"})
     async def stockwatch(self, event: AstrMessageEvent):
         """个人盯盘助理：持仓与关注、偏好引导、行情研判、监控和日报。"""
+        origin = event_private_origin(event)
+        if origin is None:
+            yield event.plain_result("StockWatcher 仅接受已授权的私聊入口；请在私聊中配置和使用。")
+            return
+        text = event.get_message_str().strip()
+        if is_identity_command(text):
+            yield event.plain_result(
+                "当前私聊入口 UMO：\n"
+                + origin
+                + "\n请在插件设置的「消息入口白名单」逐项添加完整标识，至少一项，可添加多个；保存后重载插件。此指令仅显示本会话标识，不自动授权。"
+            )
+            return
+        if not self._origin_allowed(origin):
+            yield event.plain_result(
+                "当前入口未授权。请在插件设置的「消息入口白名单」添加至少一个私聊入口；可用 /盯盘 入口 查看本会话标识。"
+            )
+            return
         if self._closing:
             yield event.plain_result("StockWatcher 正在关闭，请稍后重试。")
             return
         try:
             await self.initialize()
+            if not self._origin_allowed(origin):
+                return
             if self._closing:
                 yield event.plain_result("StockWatcher 正在关闭，请稍后重试。")
                 return
             assert self.commands is not None
-            text = event.get_message_str().strip()
-            origin = event.unified_msg_origin
             message_id = getattr(getattr(event, "message_obj", None), "message_id", "")
             request_key = (
                 hashlib.sha256(f"{origin}:{message_id}".encode()).hexdigest()
@@ -166,14 +212,18 @@ class StockWatcherPlugin(Star):
             finally:
                 self._tasks.discard(task)
             for part in message_parts(response):
+                if not self._origin_allowed(origin):
+                    return
                 yield event.plain_result(part)
         except (ValidationError, MarketError) as exc:
-            yield event.plain_result(str(exc))
+            if self._origin_allowed(origin):
+                yield event.plain_result(str(exc))
         except Exception as exc:
             logger.error("StockWatcher command failed (%s)", type(exc).__name__)
-            yield event.plain_result(
-                "操作未完成。请查看插件运行状态；原始异常未回显，以避免泄露配置。"
-            )
+            if self._origin_allowed(origin):
+                yield event.plain_result(
+                    "操作未完成。请查看插件运行状态；原始异常未回显，以避免泄露配置。"
+                )
 
     async def terminate(self) -> None:
         """卸载或重载时等待任务取消，再关闭网络客户端与数据库。"""

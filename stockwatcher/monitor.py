@@ -56,6 +56,10 @@ class Monitor:
         current.update(patch)
         if current["enabled"] and not self.store.get_setting("notification_origin"):
             raise ValidationError("先用 /盯盘 提醒目标 当前 选择接收会话，再开启。")
+        if current["enabled"] and not self.delivery.origin_allowed(
+            self.store.get_setting("notification_origin")
+        ):
+            raise ValidationError("提醒目标不在消息入口白名单中，请从已授权私聊重新选择目标。")
         with self.store.transaction() as db:
             db.execute(
                 "INSERT INTO settings VALUES ('monitor_config',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
@@ -227,6 +231,8 @@ class Monitor:
         return list(dict.fromkeys(held + plans + sorted(watched)))
 
     def _evaluate(self, symbol: str, batch: MarketBatch, now: datetime, packet: dict | None = None):
+        if not self.delivery.origin_allowed(self.store.get_setting("notification_origin")):
+            return
         bar = batch.bars[-1]
         asof = packet["market_asof"] if packet else iso(bar.timestamp + timedelta(minutes=1))
         with self.store.transaction() as db:
@@ -376,6 +382,15 @@ class Monitor:
         frozen = now is not None
         now = now or datetime.now(UTC)
         async with self._lock:
+            config = await asyncio.to_thread(self.config)
+            if not config["enabled"]:
+                return {"enabled": False}
+            origin = await asyncio.to_thread(self.store.get_setting, "notification_origin")
+            if not self.delivery.origin_allowed(origin):
+                return {
+                    "enabled": False,
+                    "reason": "提醒目标未设置或不在消息入口白名单；未执行自动任务",
+                }
             await asyncio.to_thread(self.reconcile, now=now)
             config = await asyncio.to_thread(self.config)
             if not config["enabled"]:
@@ -406,7 +421,7 @@ class Monitor:
                     try:
                         # Re-read switches between symbols; disable stops subsequent work.
                         config = await asyncio.to_thread(self.config)
-                        if not config["enabled"]:
+                        if not config["enabled"] or not self.delivery.origin_allowed(origin):
                             break
                         if today and today.opens_at + timedelta(
                             minutes=1
@@ -449,6 +464,8 @@ class Monitor:
             return result
 
     async def _daily(self, symbol, session, origin, config, now, frozen):
+        if not self.delivery.origin_allowed(origin):
+            return
         local = now.astimezone(ZoneInfo(self.settings.display_timezone))
         profile = await asyncio.to_thread(self.profiles.resolved, symbol, now=now)
         daily_due = (
@@ -531,6 +548,9 @@ class Monitor:
 
     def status(self):
         return {
+            "notification_target_allowed": self.delivery.origin_allowed(
+                self.store.get_setting("notification_origin")
+            ),
             "config": self.config(),
             "last_run": self.store.get_setting("monitor_last_run"),
             "last_error": self.store.get_setting("monitor_last_error"),

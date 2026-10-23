@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from .access import allowed_origins
 from .domain import ValidationError
 
 
@@ -14,6 +15,7 @@ from .domain import ValidationError
 class Settings:
     key_id: str = field(default="", repr=False)
     secret_key: str = field(default="", repr=False)
+    allowed_origins: tuple[str, ...] = field(default=(), repr=False)
     account_mode: str = "paper"
     timeout_seconds: int = 15
     delay_minutes: int = 16
@@ -33,6 +35,7 @@ class Settings:
     deep_timeout_seconds: int = 300
 
     def __post_init__(self):
+        object.__setattr__(self, "allowed_origins", allowed_origins(self.allowed_origins))
         if self.account_mode not in {"paper", "live"}:
             raise ValidationError("Alpaca 账户模式应为 paper 或 live。")
         if not 1 <= self.timeout_seconds <= 60:
@@ -86,6 +89,7 @@ class Settings:
                 secret_key=str(
                     config.get("alpaca_secret_key") or os.environ.get("APCA_API_SECRET_KEY", "")
                 ).strip(),
+                allowed_origins=allowed_origins(config.get("allowed_origins", [])),
                 account_mode=str(
                     config.get("alpaca_account_mode")
                     or os.environ.get("STOCKWATCHER_ACCOUNT_MODE", "paper")

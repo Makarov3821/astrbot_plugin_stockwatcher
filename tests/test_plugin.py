@@ -72,11 +72,21 @@ class Event:
     def __init__(self, text):
         self.text = text
 
+    def get_message_type(self):
+        return types.SimpleNamespace(value="FriendMessage")
+
+    def get_group_id(self):
+        return ""
+
     def get_message_str(self):
         return self.text
 
     def plain_result(self, text):
         return text
+
+
+def allowed_config(*origins):
+    return {"allowed_origins": list(origins or (Event.unified_msg_origin,))}
 
 
 async def responses(plugin, text):
@@ -89,7 +99,7 @@ def test_initialize_route_idempotency_and_restart(plugin_module):
             return True
 
     async def scenario():
-        plugin = plugin_module.StockWatcherPlugin(Context(), {})
+        plugin = plugin_module.StockWatcherPlugin(Context(), allowed_config())
         await asyncio.gather(plugin.initialize(), plugin.initialize())
         original_store = plugin.store
         assert "StockWatcher" in (await responses(plugin, "盯盘 状态"))[0]
@@ -102,7 +112,7 @@ def test_initialize_route_idempotency_and_restart(plugin_module):
         assert plugin.provider._closed
         assert plugin.store._closed
         await plugin.terminate()
-        replacement = plugin_module.StockWatcherPlugin(Context(), {})
+        replacement = plugin_module.StockWatcherPlugin(Context(), allowed_config())
         assert "US:MU：1 股" in (await responses(replacement, "盯盘 持仓"))[0]
         await replacement.terminate()
 
@@ -115,7 +125,7 @@ def test_push_platform_not_found_is_not_reported_success(plugin_module):
             return False
 
     async def scenario():
-        plugin = plugin_module.StockWatcherPlugin(Context(), {})
+        plugin = plugin_module.StockWatcherPlugin(Context(), allowed_config())
         try:
             assert "未找到对应平台" in (await responses(plugin, "盯盘 推送测试"))[0]
         finally:
@@ -133,7 +143,9 @@ def test_push_uses_saved_target_and_redacts_errors(plugin_module):
             raise RuntimeError("secret-token-in-platform-exception")
 
     async def scenario():
-        plugin = plugin_module.StockWatcherPlugin(Context(), {})
+        plugin = plugin_module.StockWatcherPlugin(
+            Context(), allowed_config(Event.unified_msg_origin, "test:FriendMessage:other")
+        )
         await plugin.initialize()
         plugin.store.set_setting("notification_origin", "test:FriendMessage:other")
         try:
@@ -156,7 +168,7 @@ def test_terminate_cancels_inflight_work(plugin_module):
             await asyncio.Event().wait()
 
     async def scenario():
-        plugin = plugin_module.StockWatcherPlugin(Context(), {})
+        plugin = plugin_module.StockWatcherPlugin(Context(), allowed_config())
         task = asyncio.create_task(responses(plugin, "盯盘 推送测试"))
         await started.wait()
         await plugin.terminate()
@@ -170,7 +182,7 @@ def test_terminate_cancels_inflight_work(plugin_module):
 
 def test_after_termination_no_lazy_reinitialization(plugin_module):
     async def scenario():
-        plugin = plugin_module.StockWatcherPlugin(object(), {})
+        plugin = plugin_module.StockWatcherPlugin(object(), allowed_config())
         await plugin.terminate()
         assert "正在关闭" in (await responses(plugin, "盯盘 状态"))[0]
         assert plugin.store is None
@@ -180,7 +192,7 @@ def test_after_termination_no_lazy_reinitialization(plugin_module):
 
 def test_preferences_stock_wizard_and_hint_flow_through_actual_entry(plugin_module):
     async def scenario():
-        plugin = plugin_module.StockWatcherPlugin(object(), {})
+        plugin = plugin_module.StockWatcherPlugin(object(), allowed_config())
         try:
             first = (await responses(plugin, "盯盘 设置"))[0]
             assert "首次使用" in first

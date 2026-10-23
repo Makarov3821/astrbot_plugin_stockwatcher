@@ -17,7 +17,8 @@ from .ledger import Ledger
 from .market import MarketService
 from .storage import SCHEMA_VERSION, Store
 
-HELP = """StockWatcher v0.5：个人设置、证据与 AI 研判
+HELP = """StockWatcher v0.6：个人设置、证据与 AI 研判
+/盯盘 入口（只读查看当前私聊 UMO；业务需在插件设置添加白名单）
 /盯盘 监控 [开启|关闭|状态|巡检|重试]
 /盯盘 监控 设置 免扰开始=22:00 免扰结束=07:00 自动采用=否
 /盯盘 日报 开启/关闭/AI开启/AI关闭

@@ -30,8 +30,9 @@ def compact_packet(packet: dict, max_chars: int) -> dict:
 
 
 class BudgetedModel:
-    def __init__(self, model, store, settings, *, clock=None):
+    def __init__(self, model, store, settings, *, clock=None, origin_allowed=None):
         self.model, self.store, self.settings = model, store, settings
+        self.origin_allowed = origin_allowed
         self.clock = clock or (lambda: datetime.now(UTC))
 
     def _reserve(self, system, prompt, purpose, limit):
@@ -67,6 +68,8 @@ class BudgetedModel:
             )
 
     async def generate(self, system, prompt, origin, *, purpose="single", max_output_tokens=None):
+        if self.origin_allowed is not None and not self.origin_allowed(origin):
+            raise ModelUnavailable("消息入口授权已撤销，未启动模型调用。")
         limit = min(
             max_output_tokens or self.settings.model_max_output_tokens,
             self.settings.model_max_output_tokens,
@@ -82,6 +85,8 @@ class BudgetedModel:
                 await asyncio.to_thread(self._finish, completed, "cancelled", None)
             raise
         try:
+            if self.origin_allowed is not None and not self.origin_allowed(origin):
+                raise ModelUnavailable("消息入口授权已撤销，未启动模型调用。")
             reply = await self.model.generate(system, prompt, origin, max_output_tokens=limit)
             await asyncio.to_thread(self._finish, call_id, "returned", reply)
             return ModelReply(

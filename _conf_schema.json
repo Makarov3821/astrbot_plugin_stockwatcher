@@ -1,4 +1,11 @@
 {
+  "allowed_origins": {
+    "description": "消息入口白名单（至少添加一个私聊入口）",
+    "type": "list",
+    "default": [],
+    "obvious_hint": true,
+    "hint": "必填至少1项，可添加多个。请在私聊发送 /盯盘 入口，将返回的完整 UMO 逐项复制到这里（平台实例ID:FriendMessage:会话ID）。只支持私聊、精确匹配，不支持通配符。留空时所有业务和自动任务均不启用；保存后重载。"
+  },
   "alpaca_key_id": {
     "description": "Alpaca API Key ID",
     "type": "string",

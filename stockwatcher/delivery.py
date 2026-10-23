@@ -36,8 +36,9 @@ def in_quiet_hours(now: datetime, timezone: str, start: str, end: str) -> bool:
 
 
 class Delivery:
-    def __init__(self, store: Store, sender, *, timezone="Asia/Shanghai"):
+    def __init__(self, store: Store, sender, *, timezone="Asia/Shanghai", origin_allowed=None):
         self.store, self.sender, self.timezone = store, sender, timezone
+        self.origin_allowed = origin_allowed or (lambda origin: False)
         self._lock = asyncio.Lock()
 
     def enqueue(
@@ -133,7 +134,8 @@ class Delivery:
             ).fetchall()
             for row in rows:
                 if (
-                    not self._context_ok(row)
+                    not self.origin_allowed(row["origin"])
+                    or not self._context_ok(row)
                     or parse_time(row["expires_at"]) <= now
                     or row["origin"] != self.store.get_setting("notification_origin")
                     or (row["event_key"].startswith("daily:") and not config["daily"])
@@ -184,7 +186,9 @@ class Delivery:
                             (row["id"],),
                         )
                         if (
-                            parse_time(row["expires_at"]) <= (now if frozen else datetime.now(UTC))
+                            not self.origin_allowed(row["origin"])
+                            or parse_time(row["expires_at"])
+                            <= (now if frozen else datetime.now(UTC))
                             or in_quiet_hours(
                                 now if frozen else datetime.now(UTC),
                                 self.timezone,

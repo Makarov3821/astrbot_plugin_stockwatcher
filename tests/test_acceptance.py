@@ -64,7 +64,12 @@ def test_private_assistant_installation_story(plugin_module):
 
     async def scenario():
         plugin = plugin_module.StockWatcherPlugin(
-            Context(), {"alpaca_key_id": "fixture", "alpaca_secret_key": "fixture-secret"}
+            Context(),
+            {
+                "alpaca_key_id": "fixture",
+                "alpaca_secret_key": "fixture-secret",
+                "allowed_origins": [Event.unified_msg_origin],
+            },
         )
         await plugin.initialize()
         plugin._worker.cancel()  # This story advances the worker explicitly; no wall-clock races.
@@ -196,7 +201,9 @@ def test_private_assistant_installation_story(plugin_module):
             await plugin.terminate()
         assert plugin._worker.done()
         assert plugin.provider._closed and plugin.store._closed
-        replacement = plugin_module.StockWatcherPlugin(Context(), {})
+        replacement = plugin_module.StockWatcherPlugin(
+            Context(), {"allowed_origins": [Event.unified_msg_origin]}
+        )
         try:
             assert "10 股" in "".join(
                 [part async for part in replacement.stockwatch(Event("盯盘 持仓"))]

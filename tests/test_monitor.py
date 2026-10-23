@@ -41,9 +41,15 @@ def setup(store, ledger, *, sender=None):
         None,
         FakeModel(reply_data(entry=ENTRY, valid_for_days=7)),
     )
-    delivery = Delivery(store, sender or send)
+    delivery = Delivery(
+        store,
+        sender or send,
+        origin_allowed=lambda origin: (
+            origin in {"test:FriendMessage:1", "test:FriendMessage:other"}
+        ),
+    )
     monitor = Monitor(analysis, delivery, Settings())
-    store.set_setting("notification_origin", "test:Friend:1")
+    store.set_setting("notification_origin", "test:FriendMessage:1")
     return monitor, analysis, profiles
 
 
@@ -217,13 +223,20 @@ def test_delivery_chunks_resume_from_unsent_part_and_redact_errors(store, ledger
     monitor, _, _ = setup(store, ledger, sender=sender)
     config = monitor.configure({"enabled": True, "quiet_start": "00:00", "quiet_end": "00:00"})
     with store.transaction() as db:
-        monitor.delivery.enqueue(db, "event", "test:Friend:1", "x" * 3100, NOW)
+        monitor.delivery.enqueue(db, "event", "test:FriendMessage:1", "x" * 3100, NOW)
     assert asyncio.run(monitor.delivery.flush(config, now=NOW)) == 0
     row = store.rows("SELECT * FROM notification_outbox")[0]
     assert row["next_part"] == 1
     assert "private" not in row["last_error"]
     fail = False
-    assert asyncio.run(Delivery(store, sender).flush(config, now=NOW + timedelta(minutes=3))) == 1
+    assert (
+        asyncio.run(
+            Delivery(store, sender, origin_allowed=monitor.delivery.origin_allowed).flush(
+                config, now=NOW + timedelta(minutes=3)
+            )
+        )
+        == 1
+    )
     assert len([value for value in calls if "1/3" in value]) == 1
     assert store.rows("SELECT status FROM notification_outbox")[0][0] == "sent"
 
@@ -237,9 +250,9 @@ def test_quiet_hours_expiry_target_change_and_stop(store, ledger):
     monitor, _, _ = setup(store, ledger, sender=sender)
     config = monitor.configure({"enabled": True, "quiet_start": "22:00", "quiet_end": "07:00"})
     with store.transaction() as db:
-        monitor.delivery.enqueue(db, "event", "test:Friend:1", "text", NOW)
+        monitor.delivery.enqueue(db, "event", "test:FriendMessage:1", "text", NOW)
     assert asyncio.run(monitor.delivery.flush(config, now=NOW)) == 0  # 06:00 local
-    store.set_setting("notification_origin", "test:Friend:other")
+    store.set_setting("notification_origin", "test:FriendMessage:other")
     assert asyncio.run(monitor.delivery.flush(config, now=NOW + timedelta(hours=2))) == 0
     assert store.rows("SELECT status FROM notification_outbox")[0][0] == "cancelled"
     assert not sent
