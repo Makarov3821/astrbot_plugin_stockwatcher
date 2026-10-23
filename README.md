@@ -10,7 +10,7 @@
 
 目标环境：Python 3.12+、AstrBot `>=4.28.2,<5`，建议先用 `4.29.1` 或更新的兼容版本。本次接入审查已成功更新并核对本地 master `fc6b326`（版本文件标为 `4.29.1`）；整个声明版本范围尚未做运行验证。
 
-1. 将本仓库置于 AstrBot 的 `data/plugins/astrbot_plugin_stockwatcher/`，或使用 AstrBot 支持的插件安装方式。
+1. 在 AstrBot 插件管理中通过仓库地址 `https://github.com/Makarov3821/astrbot_plugin_stockwatcher` 安装；也可将本仓库置于 `data/plugins/astrbot_plugin_stockwatcher/`。
 2. 让 AstrBot 安装 `requirements.txt` 中的依赖；也可在其 Python 环境执行 `pip install -r requirements.txt`。
 3. 重载插件，发送 `/盯盘 帮助`、`/盯盘 状态`。也支持 `/stockwatch` 别名。
 4. 行情需要 Alpaca 凭证；账本无需行情或模型配置即可使用。
@@ -173,4 +173,4 @@ uv pip install --python .venv/bin/python --cache-dir /tmp/stockwatcher-uv-cache 
 
 插件接入方式对照 [AstrBot 官方模板](https://github.com/Soulter/helloworld) 和 [开发指南](https://docs.astrbot.app/dev/star/plugin-new.html)；多角色研究思路参考 [astrbot_plugin_fund_analyzer](https://github.com/2529huang/astrbot_plugin_fund_analyzer)，具体取舍见 [调研记录](docs/RESEARCH.md)。本地开发还对照已使用的 Vikunja 插件的入口、生命周期与主动消息接口。
 
-当前通过本地 ZIP 交付，尚未绑定远程仓库或发布插件市场；`repo` 和开源许可需在公开发布前确定，不把私人测试包称为已完成市场发布。规范核对见 [AstrBot 接入审查](docs/ASTRBOT_COMPATIBILITY.md)。
+代码仓库为 [Makarov3821/astrbot_plugin_stockwatcher](https://github.com/Makarov3821/astrbot_plugin_stockwatcher)，支持仓库安装和本地 ZIP 测试；尚未发布插件市场，开源许可仍待确定。规范核对见 [AstrBot 接入审查](docs/ASTRBOT_COMPATIBILITY.md)。
