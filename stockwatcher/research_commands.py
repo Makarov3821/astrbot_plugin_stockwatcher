@@ -15,6 +15,7 @@ from .domain import ValidationError, instrument
 from .evidence import EvidenceStore
 from .presentation import outlook_text, profile_text
 from .profiles import LABELS, Profiles, named_patch
+from .reporting import budget_summary
 from .sources import SourceService
 from .storage import Store
 
@@ -126,9 +127,7 @@ class ResearchCommands:
         if command == "用量" and len(tokens) == 1:
             if not hasattr(self.analysis.model, "stats"):
                 return "当前入口未配置模型预算统计。"
-            return json.dumps(
-                await asyncio.to_thread(self.analysis.model.stats), ensure_ascii=False, indent=2
-            )
+            return budget_summary(await asyncio.to_thread(self.analysis.model.stats))
         if self.monitor is not None and command in {"监控", "日报", "计划", "通知"}:
             return await self._monitor_command(tokens)
         if command == "开始" and len(tokens) in {1, 2}:

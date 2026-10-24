@@ -37,6 +37,15 @@ def citation_scope(packet):
     return known
 
 
+def preference_path_hints(values, known):
+    return {
+        item: "preference.values." + item.removeprefix("preference.")
+        for item in values
+        if item.startswith("preference.")
+        and "preference.values." + item.removeprefix("preference.") in known
+    }
+
+
 def validate_ids(value, known, *, nonempty=False, field="evidence_ids"):
     if not isinstance(value, list):
         raise CitationError(field, "invalid_type", "引用格式错误，需要字符串数组")
@@ -48,7 +57,11 @@ def validate_ids(value, known, *, nonempty=False, field="evidence_ids"):
         raise CitationError(field, "invalid_item_type", "引用格式错误，数组中含有非字符串")
     unknown = [item[:200] for item in value if item not in known]
     if unknown:
-        raise CitationError(
+        error = CitationError(
             field, "unknown_reference", "含有未提供的证据ID或字段路径", unknown[:10]
         )
+        hints = preference_path_hints(unknown, known)
+        if hints:
+            error.diagnostic["available_path_hints"] = hints
+        raise error
     return list(dict.fromkeys(value))

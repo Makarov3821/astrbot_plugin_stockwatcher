@@ -30,6 +30,37 @@ ROLE_SYSTEM += """\n优先回应packet.user_question提出的问题，按focus�
 基本面区分已核实的财务事实、外部叙事和缺失数据；技术面给走势证据与确认条件；事件角色区分已发生事件与未知日历；多方和空方各自给最强论点及其失效条件。证据不足可以用unknown，不为制造分歧而编结论。
 严格使用输入role代码。arguments和uncertainties每条都需至少一个合法引用：价格事实用metrics或实际存在的metrics.ma20这类字段路径，账户事实用portfolio，偏好用preference，材料缺口用source_gaps；新闻或财报只能用packet.evidence.items中的完整ev_编号，不把标题、URL或历史材料编号当作本次证据。"""
 ROLE_SYSTEM += "\n数组元素支持source_gaps[0]或source_gaps.0两种写法，索引从0开始且必须在实际数组范围内；对象字段仍使用点分隔。"
+ROLE_SYSTEM += "\n偏好实际值位于packet.preference.values，例如preference.values.horizon_days；preference.horizon_days不存在。不确定具体字段路径时可引用preference根对象，不猜测路径。"
+SYNTHESIS_INSTRUCTION = "各角色是观点而非新事实，角色论据已截取摘要。保留多空分歧和各自期限；不要投票当概率。只引用共享证据，按原结构输出。缺少角色或材料时降低结论强度。"
+
+
+def synthesis_prompt(packet, roles, errors):
+    return json.dumps(
+        {
+            "packet": packet,
+            "roles": roles,
+            "unavailable_roles": {role: error[:160] for role, error in errors.items()},
+            "instruction": SYNTHESIS_INSTRUCTION,
+        },
+        ensure_ascii=False,
+    )
+
+
+def synthesis_budget_prompt(packet, known):
+    """Bound the supplied role summaries, including worst-case JSON escaping, without a call."""
+    longest_ref = max(known, key=lambda value: len(json.dumps(value, ensure_ascii=False).encode()))
+    argument = {"text": "\0" * 200, "evidence_ids": [longest_ref] * 3}
+    roles = {
+        role: {
+            "role": role,
+            "horizon_days": 3650,
+            "stance": "support",
+            "arguments": [argument] * 2,
+            "uncertainties": [argument] * 2,
+        }
+        for role in ROLES
+    }
+    return synthesis_prompt(packet, roles, {role: "\0" * 160 for role in ROLES})
 
 
 def validate_role(text, role, known):
@@ -90,6 +121,12 @@ class DeepResearch:
         semaphore = asyncio.Semaphore(self.settings.deep_concurrency)
         results, errors, metadata = {}, {}, {}
         diagnostics = {role: {"status": "not_started"} for role in (*ROLES, "synthesis")}
+        preflight = {"status": "not_checked"}
+        role_prompts = {
+            role: json.dumps({"role": role, "focus": focus, "packet": packet}, ensure_ascii=False)
+            for role, focus in ROLES.items()
+        }
+        role_output_limit = min(1200, self.settings.model_max_output_tokens)
 
         def research_metadata(quality):
             return {
@@ -101,6 +138,7 @@ class DeepResearch:
                     "errors": errors,
                     "role_metadata": metadata,
                     "call_ceiling": 6,
+                    "budget_preflight": preflight,
                     "shared_evidence_ids": sorted(known),
                     "diagnostics": diagnostics,
                     "role_input_evidence": [
@@ -121,13 +159,10 @@ class DeepResearch:
                 try:
                     reply = await self.model.generate(
                         ROLE_SYSTEM,
-                        json.dumps(
-                            {"role": role, "focus": ROLES[role], "packet": packet},
-                            ensure_ascii=False,
-                        ),
+                        role_prompts[role],
                         origin,
                         purpose=f"deep:{role}",
-                        max_output_tokens=min(1200, self.settings.model_max_output_tokens),
+                        max_output_tokens=role_output_limit,
                     )
                     diagnostics[role].update(raw_response=reply.text[:40000], status="returned")
                     metadata[role] = reply.metadata
@@ -147,6 +182,15 @@ class DeepResearch:
 
         try:
             async with asyncio.timeout(self.settings.deep_timeout_seconds):
+                if hasattr(self.model, "ensure_plan"):
+                    preflight = await asyncio.to_thread(
+                        self.model.ensure_plan,
+                        [
+                            (ROLE_SYSTEM, prompt, role_output_limit)
+                            for prompt in role_prompts.values()
+                        ]
+                        + [(system, synthesis_budget_prompt(packet, known), None)],
+                    )
                 await asyncio.gather(*(role_call(role) for role in ROLES))
                 if not results:
                     diagnostics["synthesis"]["status"] = "skipped"
@@ -167,15 +211,7 @@ class DeepResearch:
                     }
                     for role, data in results.items()
                 }
-                synthesis = json.dumps(
-                    {
-                        "packet": packet,
-                        "roles": compact_roles,
-                        "unavailable_roles": errors,
-                        "instruction": "各角色是观点而非新事实，角色论据已截取摘要。保留多空分歧和各自期限；不要投票当概率。只引用共享证据，按原结构输出。缺少角色或材料时降低结论强度。",
-                    },
-                    ensure_ascii=False,
-                )
+                synthesis = synthesis_prompt(packet, compact_roles, errors)
                 diagnostics["synthesis"]["status"] = "requesting"
                 reply = await self.model.generate(
                     system, synthesis, origin, purpose="deep:synthesis"
@@ -184,6 +220,7 @@ class DeepResearch:
                 validate_reply(reply, packet, parse_time(packet["generated_at"]))
                 diagnostics["synthesis"]["status"] = "validated"
         except (TimeoutError, ModelUnavailable, ValidationError) as exc:
+            preflight = getattr(exc, "budget_plan", preflight)
             message = (
                 "深度研究达到总超时，已取消未完成角色，本次退回程序观察。"
                 if isinstance(exc, TimeoutError)

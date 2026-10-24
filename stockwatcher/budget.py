@@ -70,6 +70,35 @@ class BudgetedModel:
                 "深度研究需要预留 6 次调用额度；当前剩余额度不足，未启动角色调用。"
             )
 
+    def ensure_plan(self, requests):
+        """Check a whole bounded plan without charging it; each call still reserves atomically."""
+        self.ensure_calls(len(requests))
+        stats = self.stats()
+        required = sum(
+            len((system + prompt).encode("utf-8"))
+            + min(
+                output_limit or self.settings.model_max_output_tokens,
+                self.settings.model_max_output_tokens,
+            )
+            for system, prompt, output_limit in requests
+        )
+        remaining = max(0, stats["token_planning_limit"] - stats["reserved_token_estimate"])
+        plan = {
+            "planned_calls": len(requests),
+            "estimated_tokens": required,
+            "remaining_tokens": remaining,
+            "status": "ready" if required <= remaining else "insufficient",
+        }
+        if required > remaining:
+            failure = ModelUnavailable(
+                f"深度研究整轮预计需预留约 {required:,} 个预算单位，今日剩余 {remaining:,}，"
+                "预算不足，本次未启动角色调用。可查看 /盯盘 用量；"
+                "在插件设置「05 · AI 理解与研判」调整每日估算 token 预留预算并重载，或等待次日。"
+            )
+            failure.budget_plan = plan
+            raise failure
+        return plan
+
     async def generate(self, system, prompt, origin, *, purpose="single", max_output_tokens=None):
         if self.origin_allowed is not None and not self.origin_allowed(origin):
             raise ModelUnavailable("消息入口授权已撤销，未启动模型调用。")
@@ -124,6 +153,7 @@ class BudgetedModel:
         )
         return {
             "day": day,
+            "timezone": self.settings.display_timezone,
             "calls": len(rows),
             "call_limit": self.settings.model_daily_calls,
             "reserved_token_estimate": sum(row["reserved_tokens"] for row in rows),

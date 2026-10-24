@@ -4,6 +4,7 @@ import re
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 
+from .citations import preference_path_hints
 from .domain import parse_time
 
 
@@ -119,6 +120,14 @@ def citation_diagnostics(report):
             lines.append(
                 "被拒绝引用：" + "、".join(f"`{value}`" for value in error["rejected_values"][:3])
             )
+        hints = error.get("available_path_hints") or preference_path_hints(
+            error.get("rejected_values", []), research.get("shared_evidence_ids", [])
+        )
+        if hints:
+            lines.append(
+                "可用路径提示（需核对论据，不自动替换）："
+                + "、".join(f"`{path}`" for path in hints.values())
+            )
 
     if diagnostics:
         names = {**ROLE_NAMES, "synthesis": "汇总"}
@@ -157,6 +166,11 @@ def citation_diagnostics(report):
     else:
         lines.append("这份记录没有保留精确的引用失败诊断；未据此推测错误ID。")
     references = research.get("shared_evidence_ids", [])
+    plan = research.get("budget_preflight", {})
+    if plan.get("status") == "insufficient":
+        lines.append(
+            f"整轮预算预检：预计需 {plan['estimated_tokens']:,}，今日剩余 {plan['remaining_tokens']:,}；预算不足，未启动角色调用。"
+        )
     if references:
         lines.append(
             f"本次角色实际可用材料编号：{sum(ref.startswith('ev_') for ref in references)}个；裁掉或仅出现在历史记录中的材料不可作为本次引用。"
@@ -165,6 +179,21 @@ def citation_diagnostics(report):
         "允许精确引用实际提供的指标/账户/偏好字段与材料缺口；未知新闻编号和不存在的字段仍会被拒绝。"
     )
     return "\n".join(lines)
+
+
+def budget_summary(stats):
+    remaining_calls = max(0, stats["call_limit"] - stats["calls"])
+    remaining_tokens = max(0, stats["token_planning_limit"] - stats["reserved_token_estimate"])
+    return "\n".join(
+        [
+            f"模型用量（{stats['day']}，{stats['timezone']}）",
+            f"调用次数：已用 {stats['calls']} / 上限 {stats['call_limit']}；剩余 {remaining_calls} 次。",
+            f"估算预算：已预留 {stats['reserved_token_estimate']:,} / 上限 {stats['token_planning_limit']:,}；剩余 {remaining_tokens:,}。",
+            "普通分析、深度研究、复杂自然语言理解及AI日报共享预算；一轮深度最多6次调用。",
+            "输入按UTF-8字节数加输出额度保守预留，失败和取消也占用；不是厂商实际token用量或账单。",
+            f"按 {stats['timezone']} 每日00:00重置。可在插件设置「05 · AI 理解与研判」调整每日调用次数及估算预算，保存并重载。",
+        ]
+    )
 
 
 def report_summary(report):
@@ -214,6 +243,14 @@ def report_summary(report):
             "结论：本次没有形成有效的AI研判，以下只描述已取得的行情。"
             if status == "degraded"
             else "以下是程序根据日线生成的走势观察。"
+        )
+    plan = (research or {}).get("budget_preflight", {})
+    if plan.get("status") == "insufficient":
+        lines.append(
+            f"整轮预算不足：预计需预留约 {plan['estimated_tokens']:,}，今日剩余 {plan['remaining_tokens']:,}；本次未启动模型调用。"
+        )
+        lines.append(
+            "可查看 /盯盘 用量，在插件设置「05 · AI 理解与研判」调整每日预算并重载，或等待次日。"
         )
     mode = (
         "缓存行情，未验证新近性" if packet["market_mode"] == "explicit_cache" else "Alpaca延迟日线"
