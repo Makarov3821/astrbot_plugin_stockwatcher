@@ -29,6 +29,7 @@ ROLE_SYSTEM = """你是股票研究角色，只使用给定同一时点证据。
 ROLE_SYSTEM += """\n优先回应packet.user_question提出的问题，按focus承担的角度论证，不要求每个角色复述同一组均线数字。
 基本面区分已核实的财务事实、外部叙事和缺失数据；技术面给走势证据与确认条件；事件角色区分已发生事件与未知日历；多方和空方各自给最强论点及其失效条件。证据不足可以用unknown，不为制造分歧而编结论。
 严格使用输入role代码。arguments和uncertainties每条都需至少一个合法引用：价格事实用metrics或实际存在的metrics.ma20这类字段路径，账户事实用portfolio，偏好用preference，材料缺口用source_gaps；新闻或财报只能用packet.evidence.items中的完整ev_编号，不把标题、URL或历史材料编号当作本次证据。"""
+ROLE_SYSTEM += "\n数组元素支持source_gaps[0]或source_gaps.0两种写法，索引从0开始且必须在实际数组范围内；对象字段仍使用点分隔。"
 
 
 def validate_role(text, role, known):

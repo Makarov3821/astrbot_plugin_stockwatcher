@@ -80,6 +80,109 @@ def test_field_path_references_work_through_roles_and_synthesis_without_extra_ca
     assert all(item["raw_response"] for item in research["diagnostics"].values())
 
 
+def test_dot_and_bracket_indices_identify_only_real_array_elements():
+    packet = {
+        "evidence": {"items": []},
+        "metrics": {"ma20": "100"},
+        "source_gaps": ["SEC未配置", "新闻覆盖不全"],
+        "portfolio": {"risks": [{"reasons": [None]}], "empty": []},
+    }
+    known = citation_scope(packet)
+    refs = [
+        "source_gaps[0]",
+        "source_gaps[1]",
+        "source_gaps.0",
+        "source_gaps.1",
+        "portfolio.risks[0].reasons[0]",
+        "portfolio.risks.0.reasons[0]",
+        "portfolio.risks[0].reasons.0",
+        "portfolio.risks.0.reasons.0",
+    ]
+    assert validate_ids(refs, known, nonempty=True) == refs
+
+
+def test_array_syntax_does_not_admit_missing_elements_or_repair_other_references():
+    known = citation_scope(
+        {
+            "evidence": {"items": [{"evidence_id": "ev_supplied"}]},
+            "source_gaps": ["SEC未配置"],
+            "portfolio": {"risks": [{"reason": None}], "empty": []},
+            "metrics": {"ma20": "100"},
+        }
+    )
+    for bad in (
+        "source_gaps[1]",
+        "source_gaps.1",
+        "source_gaps[-1]",
+        "source_gaps[01]",
+        "source_gaps[0.0]",
+        "source_gaps['0']",
+        "source_gaps[０]",
+        "source_gaps[0].nonexistent",
+        "portfolio.empty[0]",
+        "portfolio.risks[0].imaginary",
+        "portfolio.risks[0].reason[0]",
+        "metrics.ma20[0]",
+        "ev_supplied[0]",
+        "evsupplied",
+        "previous.source_gaps[0]",
+    ):
+        with pytest.raises(CitationError) as caught:
+            validate_ids([bad], known)
+        assert caught.value.diagnostic["rejected_values"] == [bad]
+
+
+def test_report_four_style_gap_indices_pass_roles_synthesis_and_reload(store, ledger):
+    class GapSources:
+        async def sync(self, *args, **kwargs):
+            return {"gaps": ["SEC未配置", "新闻覆盖不全"]}
+
+    class BracketReferences(RoleModel):
+        async def generate(self, system, prompt, origin, **kwargs):
+            result = await super().generate(system, prompt, origin, **kwargs)
+            data = json.loads(result.text)
+            if data.get("role") == "fundamental":
+                data["uncertainties"][0]["evidence_ids"] = ["source_gaps[0]", "source_gaps[1]"]
+            elif "role" not in data:
+                data["counterarguments"][0]["evidence_ids"] = ["source_gaps[0]", "source_gaps.1"]
+            return ModelReply(json.dumps(data), result.metadata)
+
+    model = BracketReferences()
+    analysis, budget = service(store, ledger, model)
+    analysis.sources = GapSources()
+    report = asyncio.run(analysis.analyze("MU", deep=True, now=NOW))
+    loaded = analysis.load(report["id"])
+    research = loaded["model"]["research"]
+    assert loaded["status"] == "validated" and research["quality"] == "full"
+    assert loaded["input"]["source_gaps"] == ["SEC未配置", "新闻覆盖不全"]
+    assert research["roles"]["fundamental"]["uncertainties"][0]["evidence_ids"] == [
+        "source_gaps[0]",
+        "source_gaps[1]",
+    ]
+    assert research["diagnostics"]["fundamental"]["status"] == "validated"
+    assert research["diagnostics"]["synthesis"]["status"] == "validated"
+    assert research["errors"] == {}
+    assert "基本面：通过校验" in citation_diagnostics(loaded)
+    assert len(model.calls) == budget.stats()["calls"] == 6
+
+
+def test_single_model_accepts_bracket_gap_but_not_as_proof_of_event(store, ledger):
+    data = reply_data()
+    data["counterarguments"][0]["evidence_ids"] = ["source_gaps[0]"]
+    analysis, _, _ = services(store, ledger, FakeModel(data))
+    report = asyncio.run(analysis.analyze("MU", now=NOW))
+    assert report["status"] == "validated"
+    data["event_risk"] = {
+        "level": "high",
+        "reason": "缺口记录不能证明事件已经发生",
+        "evidence_ids": ["source_gaps[0]"],
+    }
+    analysis.model = FakeModel(data)
+    report = asyncio.run(analysis.analyze("MU", now=NOW))
+    assert report["status"] == "degraded"
+    assert any("事件风险不能" in item for item in report["result"]["warnings"])
+
+
 def test_failed_role_raw_output_metadata_and_exact_bad_reference_survive_storage(store, ledger):
     class BadReference(RoleModel):
         async def generate(self, system, prompt, origin, **kwargs):

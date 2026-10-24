@@ -15,7 +15,7 @@ class CitationError(ValidationError):
 
 
 def citation_scope(packet):
-    """Enumerate real field paths. No prefix/fuzzy match or invented-ID correction."""
+    """Enumerate real paths with dot/bracket list indices; never guess missing facts."""
     known = {item["evidence_id"] for item in packet["evidence"]["items"]}
 
     def visit(path, value, depth=0):
@@ -29,6 +29,7 @@ def citation_scope(packet):
         elif isinstance(value, list):
             for index, child in enumerate(value):
                 visit(f"{path}.{index}", child, depth + 1)
+                visit(f"{path}[{index}]", child, depth + 1)
 
     for root in CITATION_ROOTS:
         if root in packet:

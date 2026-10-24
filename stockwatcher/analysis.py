@@ -23,7 +23,7 @@ from .provider import MarketError
 from .sources import SourceService
 from .storage import Store
 
-PROMPT_VERSION = "single-research-0.7.3"
+PROMPT_VERSION = "single-research-0.7.4"
 ACTION_LABELS = {
     "hold": "继续持有",
     "watch": "观察等待",
@@ -40,6 +40,7 @@ SYSTEM = """你是单人盯盘助理，判断长期持有逻辑、过程风险�
 指标含 year_return_pct（相对上一年末收盘）、year_high/year_low（可用年内日线，按当前复权口径折算）；year_range_complete 为 false 时不能冒充完整年内统计。短暂反弹或单个技术信号不能证明最终底部，说明已知证据、尚缺确认和进一步失效条件。
 只能引用输入提供的证据 ID；指标事实引用 metrics，账户事实引用 portfolio，个人期待引用 preference。
 evidence_ids 必须是字符串数组。每一条支持/反证至少引用一个合法ID，不能留空，也不能用新闻标题、URL、ma20、risk等自造ID。可用 metrics、portfolio、preference、source_gaps，或这些输入对象中确实存在的字段路径（如metrics.ma20），或 evidence.items 中实际存在的完整 ev_ ID。字段路径逐级精确匹配，不允许不存在的字段、其他命名空间或历史材料ID。
+数组元素支持source_gaps[0]或source_gaps.0两种写法，索引从0开始且必须在实际数组范围内；对象字段仍使用点分隔。
 thesis.status 为 unknown、event_risk.level 为 unknown 时允许证据数组为空；其他状态必须有证据，事件风险还必须引用实际材料。缺少事实时使用 unknown，不猜造引用。
 区分用户目标、技术位置和估值情景。没有经核实的年度 EPS 数据不得生成估值目标；目标只可用输入的年度 EPS 乘你明确假设的正估值倍数，标记为情景，不称预测或合理价值证明。
 保持支持理由和反证，缺少材料可选择 unknown/insufficient。短期高风险不必然意味着长期逻辑失效。

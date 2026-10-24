@@ -1,4 +1,4 @@
-# v0.7.3 安装和设置指南
+# v0.7.4 安装和设置指南
 
 本指南按实际使用顺序说明。先装插件、授权自己的私聊、配置数据，再填写长期偏好，最后按需要开启提醒。大盘判断、关注股票、个股目标无需填写在配置页，通过聊天记录即可。
 
@@ -6,7 +6,7 @@
 
 1. 使用 Python 3.12+ 的 AstrBot，在插件管理中通过仓库地址 `https://github.com/Makarov3821/astrbot_plugin_stockwatcher` 安装。建议先用 4.29.1 或兼容更新版；声明范围是 `>=4.28.2,<5`，未逐版本实测。
 2. 私聊机器人，发送 `/盯盘 入口`。复制返回的完整会话标识，例如 `平台实例ID:FriendMessage:会话ID`，不只复制最后的号码。
-3. 在插件设置的「01 · 入口与聊天」添加该标识，保存并重载。然后发送 `/盯盘 状态`，应看到 `StockWatcher 0.7.3`。
+3. 在插件设置的「01 · 入口与聊天」添加该标识，保存并重载。然后发送 `/盯盘 状态`，应看到 `StockWatcher 0.7.4`。
 
 | 设置项 | 做什么、怎么填 |
 | --- | --- |
@@ -128,7 +128,7 @@ python -m stockwatcher.maintenance restore /safe/backup.sqlite3 /new/place/stock
 
 恢复不覆盖现有目标。恢复后监控和订阅暂停，需重新检查接收入口、计划及设置，再明确开启。
 
-手动ZIP安装可使用开发目录 `dist/astrbot_plugin_stockwatcher-v0.7.3.zip`，在AstrBot插件管理上传；也可解压到 `data/plugins/astrbot_plugin_stockwatcher/`，确保 `main.py` 直接位于该目录。用同名 `.sha256` 检查完整性。ZIP不含数据库、凭证、虚拟环境或本地AstrBot参考源码，包内有源提交和逐文件哈希清单。
+手动ZIP安装可使用开发目录 `dist/astrbot_plugin_stockwatcher-v0.7.4.zip`，在AstrBot插件管理上传；也可解压到 `data/plugins/astrbot_plugin_stockwatcher/`，确保 `main.py` 直接位于该目录。用同名 `.sha256` 检查完整性。ZIP不含数据库、凭证、虚拟环境或本地AstrBot参考源码，包内有源提交和逐文件哈希清单。
 
 依赖没装成功时，在**AstrBot实际使用的Python环境**安装 `requirements.txt` 并重载。Docker部署要在对应容器环境操作。开发用 `configs/minimal.json` 只是无凭证示例，不需要另上传；复制它不会授权任何入口。
 
